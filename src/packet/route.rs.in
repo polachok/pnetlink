@@ -1,0 +1,70 @@
+use pnet_macros_support::types::*;
+
+pub const RTM_NEWLINK: u16 = 16;
+pub const RTM_DELLINK: u16 = 17;
+pub const RTM_GETLINK: u16 = 18;
+pub const RTM_SETLINK: u16 = 19;
+
+pub const RTM_NEWADDR: u16 = 20;
+
+#[packet]
+pub struct IfInfo {
+    family: u8,
+    _pad: u8,
+    type_: u16le,
+    index: u32le,
+    flags: u32le,
+    change: u32le,
+    #[payload]
+    payload: Vec<u8>
+}
+
+#[packet]
+pub struct RtAttr {
+    rta_len: u16le,
+    rta_type: u16le,
+    #[payload]
+    #[length_fn = "rtattr_len"]
+    payload: Vec<u8>,
+}
+
+
+fn rtattr_len(pkt: &RtAttrPacket) -> usize {
+    use std::num::Wrapping;
+    (Wrapping(pkt.get_rta_len()) - Wrapping(4)).0 as usize
+}
+
+pub const IFLA_UNSPEC: u16 = 0;
+pub const IFLA_ADDRESS: u16 = 1;
+pub const IFLA_BROADCAST: u16 = 2;
+pub const IFLA_IFNAME: u16 = 3;
+pub const IFLA_MTU: u16 = 4;
+pub const IFLA_LINK: u16 = 5;
+pub const IFLA_QDISC: u16 = 6;
+pub const IFLA_STATS: u16 = 7;
+pub const IFLA_COST: u16 = 8;
+pub const IFLA_PRIORITY: u16 = 9;
+pub const IFLA_MASTER: u16 = 10;
+pub const IFLA_WIRELESS: u16 = 11;
+pub const IFLA_PROTINFO: u16 = 12;
+pub const IFLA_TXQLEN: u16 = 13;
+pub const IFLA_MAP: u16 = 14;
+pub const IFLA_WEIGHT: u16 = 15;
+pub const IFLA_OPERSTATE: u16 = 16;
+pub const IFLA_LINKMODE: u16 = 17;
+pub const IFLA_LINKINFO: u16 = 18;
+pub const IFLA_NET_NS_PID: u16 = 19;
+pub const IFLA_IFALIAS: u16 = 20;
+pub const IFLA_NUM_VF: u16 = 21;
+pub const IFLA_VFINFO_LIST: u16 = 22;
+pub const IFLA_STATS64: u16 = 23;
+pub const IFLA_VF_PORTS: u16 = 24;
+pub const IFLA_PORT_SELF: u16 = 25;
+pub const IFLA_AF_SPEC: u16 = 26;
+
+pub const IFLA_INFO_UNSPEC: u16 = 0;
+pub const IFLA_INFO_KIND: u16 = 1;
+pub const IFLA_INFO_DATA: u16 = 2;
+pub const IFLA_INFO_XSTATS: u16 = 3;
+
+
