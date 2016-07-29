@@ -4,6 +4,7 @@ use libc::{c_int,c_void};
 use libc::{socket,bind,send,recvfrom,setsockopt,getsockopt};
 use std::os::unix::io::{AsRawFd,RawFd};
 use std::io::{Error,Result};
+use std::io::Read;
 
 mod ffi {
 	use libc::{c_int, sa_family_t, c_short};
@@ -70,6 +71,12 @@ pub struct NetlinkSocket {
 impl AsRawFd for NetlinkSocket {
 	fn as_raw_fd(&self) -> RawFd {
 		self.fd
+	}
+}
+
+impl Drop for NetlinkSocket {
+	fn drop(&mut self) {
+		unsafe { libc::close(self.fd) };
 	}
 }
 
@@ -173,5 +180,11 @@ impl NetlinkSocket {
 
 	pub fn getsockopt(&mut self, option: SockOpt, val: bool) -> Result<u32> {
 		self.getsockopt_int(ffi::SOL_NETLINK, option as c_int)
+	}
+}
+
+impl Read for NetlinkSocket {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+		self.recv(buf)
 	}
 }

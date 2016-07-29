@@ -1,0 +1,55 @@
+use pnet_macros_support::types::*;
+use pnet::packet::PrimitiveValues;
+use packet::route::link::{IfFlags,IfType};
+
+#[packet]
+pub struct IfInfo {
+    family: u8,
+    _pad: u8,
+    #[construct_with(u16le)]
+    type_: IfType,
+    index: u32le,
+    #[construct_with(u32le)]
+    flags: IfFlags,
+    change: u32le,
+    #[payload]
+    payload: Vec<u8>
+}
+
+impl PrimitiveValues for IfFlags {
+    type T = (u32,);
+    fn to_primitive_values(&self) -> (u32,) {
+        (self.bits(),)
+    }
+}
+
+impl PrimitiveValues for IfType {
+    type T = (u16,);
+    fn to_primitive_values(&self) -> (u16,) {
+        use std::mem;
+        unsafe { (mem::transmute(*self),) }
+    }
+}
+
+#[packet]
+pub struct RtAttr {
+    rta_len: u16le,
+    rta_type: u16le,
+    #[payload]
+    #[length_fn = "rtattr_len"]
+    payload: Vec<u8>,
+}
+
+fn rtattr_len(pkt: &RtAttrPacket) -> usize {
+    pkt.get_rta_len() as usize - 4
+}
+
+#[packet]
+pub struct RtAttrMtu {
+    rta_len: u16le,
+    rta_type: u16le,
+    mtu: u32le,
+    #[payload]
+    #[length = "0"]
+    _payload: Vec<u8>,
+}

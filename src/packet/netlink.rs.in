@@ -1,35 +1,33 @@
 use pnet_macros_support::types::*;
-
-/* It is request message. 	*/
-pub const NLM_F_REQUEST: u16 = 1;
-/* Multipart message, terminated by NLMSG_DONE */
-pub const NLM_F_MULTI: u16 = 2;
-/* Reply with ack, with zero or error code */
-pub const NLM_F_ACK: u16 = 4;
-/* Echo this request 		*/
-pub const NLM_F_ECHO: u16 = 8;
-/* Dump was inconsistent due to sequence change */
-pub const NLM_F_DUMP_INTR: u16 = 16;
-
-/* Modifiers to GET request */
-pub const NLM_F_ROOT: u16 =	0x100;	/* specify tree	root	*/
-pub const NLM_F_MATCH: u16 = 0x200;	/* return all matching	*/
-pub const NLM_F_ATOMIC: u16 = 0x400;	/* atomic GET		*/
-pub const NLM_F_DUMP: u16 =	(NLM_F_ROOT|NLM_F_MATCH);
+use pnet::packet::PrimitiveValues;
 
 #[packet]
 pub struct Netlink {
     length: u32le,
     kind: u16le, // NOOP | ERROR | DONE | OVERRUN
-    flags: u16le,
-    seq: u16le,
-    _pad1: u16le,
+    #[construct_with(u16le)]
+    flags: NetlinkMsgFlags,
+    seq: u32le,
     pid: u32le,
+    #[payload]
+    #[length_fn = "payload_length"]
+    payload: Vec<u8>,
+}
+
+#[packet]
+pub struct NetlinkError {
+    error: u32le, // must be i32le
     #[payload]
     payload: Vec<u8>,
 }
 
-pub const NLMSG_NOOP: u16 = 1;
-pub const NLMSG_ERROR: u16 = 2;
-pub const NLMSG_DONE: u16 = 3;
-pub const NLMSG_OVERRUN: u16 = 4;
+impl PrimitiveValues for NetlinkMsgFlags {
+    type T = (u16,);
+    fn to_primitive_values(&self) -> (u16,) {
+        (self.bits(),)
+    }
+}
+
+fn payload_length(pkt: &NetlinkPacket) -> usize {
+    pkt.get_length() as usize - 16
+}
