@@ -10,7 +10,7 @@ use pnet::packet::Packet;
 use pnet::packet::PacketSize;
 use pnet::util::MacAddr;
 use libc;
-use std::io::Read;
+use std::io::{Read,self};
 
 /* rt message types */
 pub const RTM_NEWLINK: u16 = 16;
@@ -167,6 +167,7 @@ impl ::std::fmt::Debug for Link {
 }
 
 impl Link {
+
     pub fn get_link_type(&self) -> IfType {
         self.with_ifinfo(|ifi| ifi.get_type_())
     }
@@ -260,6 +261,29 @@ impl Link {
             let rta = rti.find(|rta| rta.get_rta_type() == IFLA_OPERSTATE).unwrap();
             unsafe { mem::transmute(rta.payload()[0]) }
         })
+    }
+
+    pub fn delete(self, conn: &mut NetlinkConnection) -> io::Result<()> {
+        let index = self.get_index();
+        let mut req = {
+            let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
+            NetlinkRequestBuilder::new(RTM_DELLINK, NLM_F_ACK)
+            .append({
+                let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
+                ifinfo.set_family(0 /* AF_UNSPEC */);
+                ifinfo.set_index(index);
+                ifinfo
+            }).build()
+        };
+        let mut reply = conn.send(req.get_packet());
+        for p in reply.into_iter() {
+            let packet = p.get_packet();
+            if packet.get_kind() == NLMSG_ERROR {
+                let err = NetlinkErrorPacket::new(packet.payload()).unwrap();
+                return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
+            }
+        }
+        Ok(())
     }
 
     // static methods
@@ -360,5 +384,21 @@ fn netlink_route_dump_links() {
 #[test]
 fn link_by_idx() {
     let mut conn = NetlinkConnection::new();
-    println!("{:?}", Link::get_by_index(&mut conn, 3))
+    println!("{:?}", Link::get_by_index(&mut conn, 1))
+}
+
+#[test]
+fn del_link() {
+    let mut conn = NetlinkConnection::new();
+    let link = Link::get_by_index(&mut conn, 6);
+    assert!(link.is_some());
+    let link = link.unwrap();
+    let result = link.delete(&mut conn);
+    match result {
+        Ok(_) => {
+            let link = Link::get_by_index(&mut conn, 5);
+            assert!(link.is_none());
+        },
+        Err(e) => println!("{:?}", e),
+    }
 }
