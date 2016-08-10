@@ -11,6 +11,7 @@ use libc;
 use std::io::Read;
 
 pub mod link;
+pub mod addr;
 
 include!(concat!(env!("OUT_DIR"), "/route/route.rs"));
 

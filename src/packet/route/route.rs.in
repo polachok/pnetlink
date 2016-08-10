@@ -32,6 +32,17 @@ impl PrimitiveValues for IfType {
 }
 
 #[packet]
+pub struct IfAddr {
+    family: u8,
+    prefix_len: u8,
+    flags: u8,
+    scope: u8,
+    index: u32le,
+    #[payload]
+    payload: Vec<u8>
+}
+
+#[packet]
 pub struct RtAttr {
     rta_len: u16le,
     rta_type: u16le,
