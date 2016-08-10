@@ -178,7 +178,7 @@ impl ::std::fmt::Debug for Link {
     }
 }
 
-struct LinkFactory {
+pub struct LinkFactory {
     conn: NetlinkConnection,
 }
 
@@ -236,7 +236,7 @@ impl LinkFactory {
         li.last()
     }
 
-    pub fn new_link(&mut self, name: &str, kind: LinkType) -> io::Result<Link> {
+    pub fn new_dummy_link(&mut self, name: &str) -> io::Result<Link> {
         let mut ifi = {
             let mut buf = vec![0; 32];
             let name_len = name.as_bytes().len();
@@ -404,34 +404,12 @@ impl Link {
         LinksIterator { iter: r }
     }
 
-    fn dump_links_request() -> NetlinkBuf {
-        let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-
-        NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_DUMP)
-        .append({
-            let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
-            ifinfo.set_family(0 /* AF_UNSPEC */);
-            ifinfo
-       }).build()
-    }
-
-    fn dump_links() {
-        let mut conn = NetlinkConnection::new();
-        let mut reply = conn.send(Self::dump_links_request().get_packet());
-
-        for slot in reply {
-            println!("{:?}", slot.get_packet());
-            Self::dump_link(slot.get_packet());
-        }
-    }
-
-
     fn dump_link(msg: NetlinkPacket) {
         use std::ffi::CStr;
         if msg.get_kind() != RTM_NEWLINK {
             return;
         }
-        println!("NL pkt length: {:?}", msg.get_length());
+        println!("NetLink pkt {:?}", msg);
         if let Some(ifi) = IfInfoPacket::new(&msg.payload()[0..]) {
             println!("├ ifi: {:?}", ifi);
             let payload = &ifi.payload()[0..];
@@ -528,40 +506,15 @@ impl IfInfoPacketBuilder {
 }
 
 #[test]
-fn netlink_route_dump_links() {
-    Link::dump_links();
-}
-
-#[test]
-fn link_by_idx() {
+fn find_lo() {
     let mut conn = NetlinkConnection::new();
-    println!("{:?}", Link::get_by_index(&mut conn, 1))
-}
-
-#[test]
-fn del_link() {
-    let mut conn = NetlinkConnection::new();
-    let link = Link::get_by_index(&mut conn, 6);
-    assert!(link.is_some());
-    let link = link.unwrap();
-    let result = link.delete(&mut conn);
-    match result {
-        Ok(_) => {
-            let link = Link::get_by_index(&mut conn, 6);
-            assert!(link.is_none());
-        },
-        Err(e) => println!("{:?}", e),
-    }
-}
-
-#[test]
-fn new_link() {
-    let mut conn = NetlinkConnection::new();
-    println!("{:?}", Link::new("lol0", LinkType::Dummy, &mut conn));
-}
-
-#[test]
-fn link_by_name() {
-    let mut conn = NetlinkConnection::new();
-    println!("{:?}", Link::get_by_name(&mut conn, "lo"));
+    let mut links = LinkFactory::new(conn);
+    let lo0 = links.get_link_by_name("lo");
+    assert!(lo0.is_some());
+    let lo0 = lo0.unwrap();
+    let idx = lo0.get_index();
+    let lo1 = links.get_link_by_index(idx);
+    assert!(lo1.is_some());
+    let lo1 = lo1.unwrap();
+    assert!(lo1.get_name() == lo0.get_name());
 }

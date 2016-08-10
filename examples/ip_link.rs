@@ -1,11 +1,12 @@
 extern crate pnetlink;
 
 use pnetlink::packet::netlink::NetlinkConnection;
-use pnetlink::packet::route::link::Link;
+use pnetlink::packet::route::link::LinkFactory;
 
 fn main() {
     let mut conn = NetlinkConnection::new();
-    for link in Link::iter_links(&mut conn) {
+    let mut links = LinkFactory::new(conn);
+    for link in links.iter_links() {
         println!("{:?}", link);
     }
 }
