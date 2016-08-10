@@ -297,18 +297,6 @@ impl Link {
         }
         Ok(())
     }
-    /*
-fn new(name: &str, kind: &str) -> io::Result<()> {
-        let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-        let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL)
-            .append({
-                let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
-                ifinfo.set_family(0 /* AF_UNSPEC */);
-                ifinfo
-            }).build();
-        Ok(())
-    }
-    */
 
     // static methods
     pub fn new(name: &str, kind: LinkType, conn: &mut NetlinkConnection) -> io::Result<Link> {
