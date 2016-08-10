@@ -311,7 +311,7 @@ fn new(name: &str, kind: &str) -> io::Result<()> {
     */
 
     // static methods
-    pub fn new(name: &str, kind: LinkType, conn: &mut NetlinkConnection) -> io::Result<()> {
+    pub fn new(name: &str, kind: LinkType, conn: &mut NetlinkConnection) -> io::Result<Link> {
         let mut ifi = {
             let mut buf = vec![0; 32];
             let name_len = name.as_bytes().len();
@@ -343,17 +343,20 @@ fn new(name: &str, kind: &str) -> io::Result<()> {
         };
         let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
             .append(ifi.get_packet()).build();
-        println!("REQ: {:?}", Self::dump_link(req.get_packet()));
-        let mut reply = conn.send(req.get_packet());
-        for pkt in reply {
-            let pkt = pkt.get_packet();
-            println!("PKT: {:?}", pkt);
-            if pkt.get_kind() == NLMSG_ERROR {
-                let err = NetlinkErrorPacket::new(pkt.payload()).unwrap();
-                return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
+        {
+            let mut reply = conn.send(req.get_packet());
+            for pkt in reply {
+                let pkt = pkt.get_packet();
+                if pkt.get_kind() == NLMSG_ERROR {
+                    let err = NetlinkErrorPacket::new(pkt.payload()).unwrap();
+                    if err.get_error() != 0 {
+                        return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
+                    }
+                    break;
+                }
             }
         }
-        Ok(())
+        Ok(Link::get_by_name(conn, name).unwrap())
     }
 
     pub fn iter_links(conn: &mut NetlinkConnection) -> LinksIterator<&mut NetlinkConnection> {
@@ -363,9 +366,23 @@ fn new(name: &str, kind: &str) -> io::Result<()> {
 
     pub fn get_by_name(conn: &mut NetlinkConnection, name: &str) -> Option<Link> {
         let req = {
-            IfInfoPacketBuilder::new()
-
-        }
+            let name_len = name.as_bytes().len();
+            let mut buf = vec![0; RtAttrPacket::minimum_packet_size() + name_len + 1];
+            let ifi = IfInfoPacketBuilder::new().append({
+                {
+                    let mut ifname_rta = MutableRtAttrPacket::new(&mut buf).unwrap();
+                    ifname_rta.set_rta_type(IFLA_IFNAME);
+                    ifname_rta.set_rta_len((RtAttrPacket::minimum_packet_size() + name_len + 1) as u16);
+                    let mut payload = ifname_rta.payload_mut();
+                    payload[0..name_len].copy_from_slice(name.as_bytes());
+                }
+                RtAttrPacket::new(&buf[..]).unwrap()
+            }).build();
+            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK).append(ifi.get_packet()).build()
+        };
+        let mut reply = conn.send(req.get_packet());
+        let li = LinksIterator { iter: reply.into_iter() };
+        li.last()
     }
 
     pub fn get_by_index(conn: &mut NetlinkConnection, index: u32) -> Option<Link> {
@@ -545,4 +562,10 @@ fn del_link() {
 fn new_link() {
     let mut conn = NetlinkConnection::new();
     println!("{:?}", Link::new("lol0", LinkType::Dummy, &mut conn));
+}
+
+#[test]
+fn link_by_name() {
+    let mut conn = NetlinkConnection::new();
+    println!("{:?}", Link::get_by_name(&mut conn, "lo"));
 }
