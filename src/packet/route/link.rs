@@ -172,114 +172,37 @@ impl<R: Read> Iterator for LinksIterator<R> {
 
 impl ::std::fmt::Debug for Link {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        try!(write!(f, "{}: {}: <{:?}> mtu {} qdisc {} state {:?}\n", self.get_index(), self.get_name(),
+        try!(write!(f, "{}: {:?}: <{:?}> mtu {:?} qdisc {:?} state {:?}\n", self.get_index(), self.get_name(),
                 self.get_flags(), self.get_mtu(), self.get_qdisc(), self.get_state()));
-        write!(f, "   Link/{:?} {:?} brd {:?}", self.get_link_type(), self.get_hw_addr(), self.get_broadcast())
+        write!(f, "   Link/{:?} {:?} brd {:?}", self.get_type(), self.get_hw_addr(), self.get_broadcast())
     }
 }
 
-impl Link {
+struct LinkFactory {
+    conn: NetlinkConnection,
+}
 
-    pub fn get_link_type(&self) -> IfType {
-        self.with_ifinfo(|ifi| ifi.get_type_())
+impl LinkFactory {
+    pub fn new(conn: NetlinkConnection) -> Self {
+        LinkFactory { conn: conn }
     }
 
-    pub fn get_hw_addr(&self) -> MacAddr {
-        self.with_rta_iter(|mut rti| {
-            let rta = rti.find(|rta| rta.get_rta_type() == IFLA_ADDRESS).unwrap();
-            let payload = rta.payload();
-            MacAddr::new(payload[0], payload[1], payload[2], payload[3], payload[4], payload[5])
-        })
+    pub fn iter_links(&mut self) -> LinksIterator<&mut NetlinkConnection> {
+        let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
+        let req = NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_DUMP)
+        .append({
+            let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
+            ifinfo.set_family(0 /* AF_UNSPEC */);
+            ifinfo
+        }).build();
+        let mut reply = self.conn.send(req.get_packet());
+        LinksIterator { iter: reply.into_iter() }
     }
 
-    pub fn get_broadcast(&self) -> MacAddr {
-        self.with_rta_iter(|mut rti| {
-            let rta = rti.find(|rta| rta.get_rta_type() == IFLA_BROADCAST).unwrap();
-            let payload = rta.payload();
-            MacAddr::new(payload[0], payload[1], payload[2], payload[3], payload[4], payload[5])
-        })
-    }
-
-    pub fn get_flags(&self) -> IfFlags {
-        let msg = self.packet.get_packet();
-        let ifi = IfInfoPacket::new(&msg.payload()[0..]).unwrap();
-        return ifi.get_flags();
-    }
-
-    pub fn get_index(&self) -> u32 {
-        let msg = self.packet.get_packet();
-        let ifi = IfInfoPacket::new(&msg.payload()[0..]).unwrap();
-        return ifi.get_index();
-    }
-
-    pub fn get_name(&self) -> String {
-        use std::ffi::CStr;
-        let msg = self.packet.get_packet();
-        let ifi = IfInfoPacket::new(&msg.payload()[0..]).unwrap();
-
-        let payload = &ifi.payload()[0..];
-        let iter = RtAttrIterator::new(payload);
-        for rta in iter {
-            match rta.get_rta_type() {
-                IFLA_IFNAME => {
-                    let cstr = CStr::from_bytes_with_nul(rta.payload()).unwrap();
-                    return cstr.to_owned().into_string().unwrap();
-                },
-                _ => {},
-            }
-        }
-        unreachable!();
-    }
-
-    fn with_packet<T,F>(&self, cb: F) -> T
-        where F: Fn(NetlinkPacket) -> T {
-        cb(self.packet.get_packet())
-    }
-
-    fn with_ifinfo<T,F>(&self, cb: F) -> T
-        where F: Fn(IfInfoPacket) -> T {
-        self.with_packet(|pkt| 
-            cb(IfInfoPacket::new(pkt.payload()).unwrap())
-        )
-    }
-
-    fn with_rta_iter<T,F>(&self, cb: F) -> T
-        where F: Fn(RtAttrIterator) -> T {
-            self.with_ifinfo(|ifi| {
-                cb(RtAttrIterator::new(ifi.payload()))
-            })
-    }
-
-    fn get_mtu(&self) -> u32 {
-        self.with_rta_iter(|mut rti| {
-            let rta = rti.find(|rta| rta.get_rta_type() == IFLA_MTU).unwrap();
-            let mtu = RtAttrMtuPacket::new(rta.packet()).unwrap();
-            mtu.get_mtu()
-        })
-    }
-
-    fn get_qdisc(&self) -> String {
-        use std::ffi::CStr;
-        self.with_rta_iter(|mut rti| {
-            let rta = rti.find(|rta| rta.get_rta_type() == IFLA_QDISC).unwrap();
-            let cstr = CStr::from_bytes_with_nul(rta.payload()).unwrap();
-            cstr.to_owned().into_string().unwrap()
-        })
-    }
-
-    fn get_state(&self) -> OperState {
-        use std::mem;
-        self.with_rta_iter(|mut rti| {
-            let rta = rti.find(|rta| rta.get_rta_type() == IFLA_OPERSTATE).unwrap();
-            unsafe { mem::transmute(rta.payload()[0]) }
-        })
-    }
-
-    pub fn delete(self, conn: &mut NetlinkConnection) -> io::Result<()> {
-        let index = self.get_index();
+    pub fn get_link_by_index(&mut self, index: u32) -> Option<Link> {
         let mut req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-            NetlinkRequestBuilder::new(RTM_DELLINK, NLM_F_ACK)
+            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK)
             .append({
                 let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                 ifinfo.set_family(0 /* AF_UNSPEC */);
@@ -287,19 +210,33 @@ impl Link {
                 ifinfo
             }).build()
         };
-        let mut reply = conn.send(req.get_packet());
-        for p in reply.into_iter() {
-            let packet = p.get_packet();
-            if packet.get_kind() == NLMSG_ERROR {
-                let err = NetlinkErrorPacket::new(packet.payload()).unwrap();
-                return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
-            }
-        }
-        Ok(())
+        let mut reply = self.conn.send(req.get_packet());
+        let li = LinksIterator { iter: reply.into_iter() };
+        li.last()
     }
 
-    // static methods
-    pub fn new(name: &str, kind: LinkType, conn: &mut NetlinkConnection) -> io::Result<Link> {
+    pub fn get_link_by_name(&mut self, name: &str) -> Option<Link> {
+        let req = {
+            let name_len = name.as_bytes().len();
+            let mut buf = vec![0; RtAttrPacket::minimum_packet_size() + name_len + 1];
+            let ifi = IfInfoPacketBuilder::new().append({
+                {
+                    let mut ifname_rta = MutableRtAttrPacket::new(&mut buf).unwrap();
+                    ifname_rta.set_rta_type(IFLA_IFNAME);
+                    ifname_rta.set_rta_len((RtAttrPacket::minimum_packet_size() + name_len + 1) as u16);
+                    let mut payload = ifname_rta.payload_mut();
+                    payload[0..name_len].copy_from_slice(name.as_bytes());
+                }
+                RtAttrPacket::new(&buf[..]).unwrap()
+            }).build();
+            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK).append(ifi.get_packet()).build()
+        };
+        let mut reply = self.conn.send(req.get_packet());
+        let li = LinksIterator { iter: reply.into_iter() };
+        li.last()
+    }
+
+    pub fn new_link(&mut self, name: &str, kind: LinkType) -> io::Result<Link> {
         let mut ifi = {
             let mut buf = vec![0; 32];
             let name_len = name.as_bytes().len();
@@ -332,7 +269,7 @@ impl Link {
         let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
             .append(ifi.get_packet()).build();
         {
-            let mut reply = conn.send(req.get_packet());
+            let mut reply = self.conn.send(req.get_packet());
             for pkt in reply {
                 let pkt = pkt.get_packet();
                 if pkt.get_kind() == NLMSG_ERROR {
@@ -344,39 +281,103 @@ impl Link {
                 }
             }
         }
-        Ok(Link::get_by_name(conn, name).unwrap())
+        Ok(self.get_link_by_name(name).unwrap())
+    }
+}
+
+impl Link {
+    /// Get link's unique index
+    pub fn get_index(&self) -> u32 {
+        self.with_ifinfo(|ifi| ifi.get_index())
     }
 
-    pub fn iter_links(conn: &mut NetlinkConnection) -> LinksIterator<&mut NetlinkConnection> {
-        let mut reply = conn.send(Self::dump_links_request().get_packet());
-        LinksIterator { iter: reply.into_iter() }
+    pub fn get_type(&self) -> IfType {
+        self.with_ifinfo(|ifi| ifi.get_type_())
     }
 
-    pub fn get_by_name(conn: &mut NetlinkConnection, name: &str) -> Option<Link> {
-        let req = {
-            let name_len = name.as_bytes().len();
-            let mut buf = vec![0; RtAttrPacket::minimum_packet_size() + name_len + 1];
-            let ifi = IfInfoPacketBuilder::new().append({
-                {
-                    let mut ifname_rta = MutableRtAttrPacket::new(&mut buf).unwrap();
-                    ifname_rta.set_rta_type(IFLA_IFNAME);
-                    ifname_rta.set_rta_len((RtAttrPacket::minimum_packet_size() + name_len + 1) as u16);
-                    let mut payload = ifname_rta.payload_mut();
-                    payload[0..name_len].copy_from_slice(name.as_bytes());
-                }
-                RtAttrPacket::new(&buf[..]).unwrap()
-            }).build();
-            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK).append(ifi.get_packet()).build()
-        };
-        let mut reply = conn.send(req.get_packet());
-        let li = LinksIterator { iter: reply.into_iter() };
-        li.last()
+    pub fn get_flags(&self) -> IfFlags {
+        self.with_ifinfo(|ifi| ifi.get_flags())
     }
 
-    pub fn get_by_index(conn: &mut NetlinkConnection, index: u32) -> Option<Link> {
+    pub fn get_hw_addr(&self) -> Option<MacAddr> {
+        self.with_rta(IFLA_ADDRESS, |rta| {
+            let payload = rta.payload();
+            MacAddr::new(payload[0], payload[1], payload[2], payload[3], payload[4], payload[5])
+        })
+    }
+
+    pub fn get_mtu(&self) -> Option<u32> {
+        self.with_rta(IFLA_MTU, |rta| {
+            let mtu = RtAttrMtuPacket::new(rta.packet()).unwrap();
+            mtu.get_mtu()
+        })
+    }
+
+    /// Queueing discipline
+    pub fn get_qdisc(&self) -> Option<String> {
+        use std::ffi::CStr;
+        self.with_rta(IFLA_QDISC, |rta| {
+            let cstr = CStr::from_bytes_with_nul(rta.payload()).unwrap();
+            cstr.to_owned().into_string().unwrap()
+        })
+    }
+
+    pub fn get_state(&self) -> OperState {
+        use std::mem;
+        self.with_rta_iter(|mut rti| {
+            let rta = rti.find(|rta| rta.get_rta_type() == IFLA_OPERSTATE).unwrap();
+            unsafe { mem::transmute(rta.payload()[0]) }
+        })
+    }
+
+    pub fn get_broadcast(&self) -> Option<MacAddr> {
+        self.with_rta(IFLA_BROADCAST, |rta| {
+            let payload = rta.payload();
+            MacAddr::new(payload[0], payload[1], payload[2], payload[3], payload[4], payload[5])
+        })
+    }
+
+    pub fn get_name(&self) -> Option<String> {
+        use std::ffi::CStr;
+        self.with_rta(IFLA_IFNAME, |rta| {
+            let payload = rta.payload();
+            let cstr = CStr::from_bytes_with_nul(rta.payload()).unwrap();
+            cstr.to_owned().into_string().unwrap()
+        })
+    }
+
+    // helper methods
+    fn with_packet<T,F>(&self, cb: F) -> T
+        where F: Fn(NetlinkPacket) -> T {
+        cb(self.packet.get_packet())
+    }
+
+    fn with_ifinfo<T,F>(&self, cb: F) -> T
+        where F: Fn(IfInfoPacket) -> T {
+        self.with_packet(|pkt| 
+            cb(IfInfoPacket::new(pkt.payload()).unwrap())
+        )
+    }
+
+    fn with_rta_iter<T,F>(&self, cb: F) -> T
+        where F: Fn(RtAttrIterator) -> T {
+            self.with_ifinfo(|ifi| {
+                cb(RtAttrIterator::new(ifi.payload()))
+            })
+    }
+
+    fn with_rta<T,F>(&self, rta_type: u16, cb: F) -> Option<T>
+        where F: Fn(RtAttrPacket) -> T {
+        self.with_rta_iter(|mut rti| {
+            rti.find(|rta| rta.get_rta_type() == rta_type).map(|rta| cb(rta))
+        })
+    }
+
+    pub fn delete(self, conn: &mut NetlinkConnection) -> io::Result<()> {
+        let index = self.get_index();
         let mut req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK)
+            NetlinkRequestBuilder::new(RTM_DELLINK, NLM_F_ACK)
             .append({
                 let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                 ifinfo.set_family(0 /* AF_UNSPEC */);
@@ -385,10 +386,17 @@ impl Link {
             }).build()
         };
         let mut reply = conn.send(req.get_packet());
-        let li = LinksIterator { iter: reply.into_iter() };
-        li.last()
+        for p in reply.into_iter() {
+            let packet = p.get_packet();
+            if packet.get_kind() == NLMSG_ERROR {
+                let err = NetlinkErrorPacket::new(packet.payload()).unwrap();
+                return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
+            }
+        }
+        Ok(())
     }
 
+    // static methods
     fn get_links_iter<R: Read>(r: NetlinkBufIterator<R>) -> LinksIterator<R> {
         //let mut conn = NetlinkConnection::new();
         //let mut buf = [0; 32];
