@@ -47,11 +47,6 @@ pub const NLMSG_ERROR: u16 = 2;
 pub const NLMSG_DONE: u16 = 3;
 pub const NLMSG_OVERRUN: u16 = 4;
 
-fn align(len: usize) -> usize {
-    const RTA_ALIGNTO: usize = 4;
-
-    ((len)+RTA_ALIGNTO-1) & !(RTA_ALIGNTO-1)
-}
 
 impl<'a> NetlinkIterable<'a> {
     pub fn new(buf: &'a [u8]) -> Self {
@@ -195,7 +190,7 @@ impl<R: Read> NetlinkReader<R> {
             }
             loop {
                 if let Some(pkt) = NetlinkPacket::new(&self.buf[self.read_at..]) {
-                    let len = align(pkt.get_length() as usize);
+                    let len = ::util::align(pkt.get_length() as usize);
                     if len == 0 {
                         return Ok(None);
                     }
@@ -288,12 +283,17 @@ impl NetlinkRequestBuilder {
     pub fn append<P: PacketSize + Packet>(mut self, data: P) -> Self {
         let data = data.packet();
         let len = data.len();
+        let aligned_len = ::util::align(len as usize);
         {
             let mut pkt = MutableNetlinkPacket::new(&mut self.data).unwrap();
-            let len = pkt.get_length();
-            pkt.set_length(len + len as u32);
+            let new_len = pkt.get_length() + len as u32;
+            pkt.set_length(new_len as u32);
         }
         self.data.extend_from_slice(data);
+        // add padding for alignment
+        for _ in len..aligned_len {
+            self.data.push(0);
+        }
         self
     }
 

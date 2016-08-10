@@ -6,3 +6,4 @@ extern crate libc;
 
 pub mod socket;
 pub mod packet;
+mod util;

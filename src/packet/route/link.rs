@@ -1,6 +1,6 @@
-use packet::route::{IfInfoPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,RtAttrMtuPacket};
+use packet::route::{IfInfoPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
-use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_ROOT};
+use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
 use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
 use packet::netlink::{NetlinkBuf,NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
 use ::socket::{NetlinkSocket,NetlinkProtocol};
@@ -83,6 +83,18 @@ impl IfType {
         /* XXX */
         unsafe { mem::transmute(val) }
     }
+}
+
+#[derive(Copy,Clone,Debug)]
+pub enum LinkType {
+    Vlan,
+    Veth,
+    Vcan,
+    Dummy,
+    Ifb,
+    MacVlan,
+    Can,
+    Bridge
 }
 
 /* link flags */
@@ -285,11 +297,75 @@ impl Link {
         }
         Ok(())
     }
+    /*
+fn new(name: &str, kind: &str) -> io::Result<()> {
+        let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
+        let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL)
+            .append({
+                let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
+                ifinfo.set_family(0 /* AF_UNSPEC */);
+                ifinfo
+            }).build();
+        Ok(())
+    }
+    */
 
     // static methods
+    pub fn new(name: &str, kind: LinkType, conn: &mut NetlinkConnection) -> io::Result<()> {
+        let mut ifi = {
+            let mut buf = vec![0; 32];
+            let name_len = name.as_bytes().len();
+            let mut buf_name = vec![0; RtAttrPacket::minimum_packet_size() + name_len + 1];
+            IfInfoPacketBuilder::new().
+                append({
+                    {
+                        let mut ifname_rta = MutableRtAttrPacket::new(&mut buf_name).unwrap();
+                        ifname_rta.set_rta_type(IFLA_IFNAME);
+                        ifname_rta.set_rta_len(4 + name_len as u16 + 1);
+                        let mut payload = ifname_rta.payload_mut();
+                        payload[0..name_len].copy_from_slice(name.as_bytes());
+                    }
+                    RtAttrPacket::new(&buf_name).unwrap()
+                }).
+                append({
+                    {
+                        let mut link_info_rta = MutableRtAttrPacket::new(&mut buf).unwrap();
+                        link_info_rta.set_rta_type(IFLA_LINKINFO);
+                        link_info_rta.set_rta_len(6 + 4 + 4);
+                        let mut info_kind_rta = MutableRtAttrPacket::new(link_info_rta.payload_mut()).unwrap();
+                        info_kind_rta.set_rta_type(IFLA_INFO_KIND);
+                        info_kind_rta.set_rta_len(6 + 4);
+                        let mut payload = info_kind_rta.payload_mut();
+                        payload[0..6].copy_from_slice(b"dummy\0");
+                    }
+                    RtAttrPacket::new(&buf).unwrap()
+            }).build()
+        };
+        let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
+            .append(ifi.get_packet()).build();
+        println!("REQ: {:?}", Self::dump_link(req.get_packet()));
+        let mut reply = conn.send(req.get_packet());
+        for pkt in reply {
+            let pkt = pkt.get_packet();
+            println!("PKT: {:?}", pkt);
+            if pkt.get_kind() == NLMSG_ERROR {
+                let err = NetlinkErrorPacket::new(pkt.payload()).unwrap();
+                return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
+            }
+        }
+        Ok(())
+    }
+
     pub fn iter_links(conn: &mut NetlinkConnection) -> LinksIterator<&mut NetlinkConnection> {
         let mut reply = conn.send(Self::dump_links_request().get_packet());
         LinksIterator { iter: reply.into_iter() }
+    }
+
+    pub fn get_by_name(conn: &mut NetlinkConnection, name: &str) -> Option<Link> {
+        let req = {
+            IfInfoPacketBuilder::new()
+
+        }
     }
 
     pub fn get_by_index(conn: &mut NetlinkConnection, index: u32) -> Option<Link> {
@@ -336,12 +412,13 @@ impl Link {
         }
     }
 
+
     fn dump_link(msg: NetlinkPacket) {
         use std::ffi::CStr;
         if msg.get_kind() != RTM_NEWLINK {
             return;
         }
-
+        println!("NL pkt length: {:?}", msg.get_length());
         if let Some(ifi) = IfInfoPacket::new(&msg.payload()[0..]) {
             println!("├ ifi: {:?}", ifi);
             let payload = &ifi.payload()[0..];
@@ -376,6 +453,67 @@ impl Link {
     }
 }
 
+struct IfInfoPacketBuf {
+    data: Vec<u8>,
+}
+
+impl IfInfoPacketBuf {
+    pub fn get_packet(&self) -> IfInfoPacket {
+        IfInfoPacket::new(&self.data[..]).unwrap()
+    }
+}
+
+struct IfInfoPacketBuilder {
+    data: Vec<u8>,
+}
+
+impl IfInfoPacketBuilder {
+    pub fn new() -> Self {
+        let len = MutableIfInfoPacket::minimum_packet_size();
+        let mut data = vec![0; len];
+        IfInfoPacketBuilder { data: data }
+    }
+
+    pub fn set_family(mut self, family: u8) -> Self {
+        {
+            let mut pkt = MutableIfInfoPacket::new(&mut self.data[..]).unwrap();
+            pkt.set_family(family);
+        }
+        self
+    }
+
+    pub fn set_type(mut self, type_: IfType) -> Self {
+        {
+            let mut pkt = MutableIfInfoPacket::new(&mut self.data[..]).unwrap();
+            pkt.set_type_(type_);
+        }
+        self
+    }
+
+    pub fn set_flags(mut self, flags: IfFlags) -> Self {
+        {
+            let mut pkt = MutableIfInfoPacket::new(&mut self.data[..]).unwrap();
+            pkt.set_flags(flags);
+        }
+        self
+    }
+
+    pub fn append(mut self, rta: RtAttrPacket) -> Self {
+        let len = rta.get_rta_len() as usize;
+        let aligned_len = ::util::align(len);
+        self.data.extend_from_slice(&rta.packet()[0..len]);
+        // add padding for alignment
+        for _ in len..aligned_len {
+            self.data.push(0);
+        }
+        self
+    }
+
+    pub fn build(self) -> IfInfoPacketBuf {
+        IfInfoPacketBuf { data: self.data }
+    }
+}
+
 #[test]
 fn netlink_route_dump_links() {
     Link::dump_links();
@@ -396,9 +534,15 @@ fn del_link() {
     let result = link.delete(&mut conn);
     match result {
         Ok(_) => {
-            let link = Link::get_by_index(&mut conn, 5);
+            let link = Link::get_by_index(&mut conn, 6);
             assert!(link.is_none());
         },
         Err(e) => println!("{:?}", e),
     }
+}
+
+#[test]
+fn new_link() {
+    let mut conn = NetlinkConnection::new();
+    println!("{:?}", Link::new("lol0", LinkType::Dummy, &mut conn));
 }
