@@ -178,12 +178,12 @@ impl ::std::fmt::Debug for Link {
     }
 }
 
-pub struct LinkManager {
-    conn: NetlinkConnection,
+pub struct LinkManager<'a> {
+    conn: &'a mut NetlinkConnection,
 }
 
-impl LinkManager {
-    pub fn new(conn: NetlinkConnection) -> Self {
+impl<'a> LinkManager<'a> {
+    pub fn new(conn: &'a mut NetlinkConnection) -> Self {
         LinkManager { conn: conn }
     }
 
@@ -510,7 +510,7 @@ impl IfInfoPacketBuilder {
 #[test]
 fn find_lo() {
     let mut conn = NetlinkConnection::new();
-    let mut links = LinkManager::new(conn);
+    let mut links = LinkManager::new(&mut conn);
     let lo0 = links.get_link_by_name("lo");
     assert!(lo0.is_some());
     let lo0 = lo0.unwrap();
@@ -525,7 +525,7 @@ fn find_lo() {
 // root permissions required
 fn create_and_delete_link() {
     let mut conn = NetlinkConnection::new();
-    let mut links = LinkManager::new(conn);
+    let mut links = LinkManager::new(&mut conn);
     let link = links.new_dummy_link("test1488");
     let link = link.unwrap();
     assert!(link.get_name() == Some("test1488".to_owned()));
