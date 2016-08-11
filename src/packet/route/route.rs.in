@@ -1,6 +1,7 @@
 use pnet_macros_support::types::*;
 use pnet::packet::PrimitiveValues;
 use packet::route::link::{IfFlags,IfType};
+use packet::route::addr::{IfAddrFlags,Scope};
 
 #[packet]
 pub struct IfInfo {
@@ -31,12 +32,29 @@ impl PrimitiveValues for IfType {
     }
 }
 
+impl PrimitiveValues for Scope {
+    type T = (u8,);
+    fn to_primitive_values(&self) -> (u8,) {
+        use std::mem;
+        unsafe { (mem::transmute(*self),) }
+    }
+}
+
+impl PrimitiveValues for IfAddrFlags {
+    type T = (u8,);
+    fn to_primitive_values(&self) -> (u8,) {
+        (self.bits(),)
+    }
+}
+
 #[packet]
 pub struct IfAddr {
     family: u8,
     prefix_len: u8,
-    flags: u8,
-    scope: u8,
+    #[construct_with(u8)]
+    flags: IfAddrFlags,
+    #[construct_with(u8)]
+    scope: Scope,
     index: u32le,
     #[payload]
     payload: Vec<u8>

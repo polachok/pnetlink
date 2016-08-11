@@ -1,4 +1,4 @@
-use packet::route::{MutableIfInfoPacket,IfAddrPacket,MutableIfAddrPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
+use packet::route::{CacheInfoPacket,MutableIfInfoPacket,IfAddrPacket,MutableIfAddrPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
 use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
@@ -19,6 +19,33 @@ pub const RTM_NEWADDR: u16 = 20;
 pub const RTM_DELADDR: u16 = 21;
 pub const RTM_GETADDR: u16 = 22;
 
+/* rtm_scope
+
+   Really it is not scope, but sort of distance to the destination.
+   NOWHERE are reserved for not existing destinations, HOST is our
+   local addresses, LINK are destinations, located on directly attached
+   link and UNIVERSE is everywhere in the Universe.
+
+   Intermediate values are also possible f.e. interior routes
+   could be assigned a value between UNIVERSE and LINK.
+*/
+#[derive(Debug,Copy,Clone)]
+#[repr(u8)]
+pub enum Scope {
+    Global=0,
+    /* User defined values  */
+    Site=200,
+    Link=253,
+    Host=254,
+    Nowhere=255
+}
+
+impl Scope {
+    pub fn new(val: u8) -> Self {
+        use std::mem;
+        unsafe { mem::transmute(val) }
+    }
+}
 
 /* link flags */
 bitflags! {
@@ -32,6 +59,12 @@ bitflags! {
         const DEPRECATED = 0x20,
         const TENTATIVE = 0x40,
         const PERMANENT = 0x80,
+    }
+}
+
+impl IfAddrFlags {
+    pub fn new(val: u8) -> Self {
+        IfAddrFlags::from_bits_truncate(val)
     }
 }
 
@@ -72,10 +105,19 @@ impl<R: Read> Iterator for AddrsIterator<R> {
     }
 }
 
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Eq,PartialEq)]
 pub enum IpAddr {
     V4(Ipv4Addr),
     V6(Ipv6Addr),
+}
+
+impl ::std::fmt::Debug for IpAddr {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        match self {
+            &IpAddr::V4(ip) => ip.fmt(f),
+            &IpAddr::V6(ip) => ip.fmt(f),
+        }
+    }
 }
 
 #[derive(Clone,Debug)]
@@ -83,12 +125,12 @@ pub struct Addr {
     packet: NetlinkBuf,
 }
 
-struct AddrManager<'a> {
+pub struct AddrManager<'a> {
     conn: &'a mut NetlinkConnection,
 }
 
 impl<'a> AddrManager<'a> {
-    fn new(conn: &'a mut NetlinkConnection) -> Self {
+    pub fn new(conn: &'a mut NetlinkConnection) -> Self {
         AddrManager { conn: conn }
     }
 
@@ -119,7 +161,7 @@ impl Addr {
         self.with_ifaddr(|ifa| ifa.get_family())
     }
 
-    pub fn get_flags(&self) -> u8 {
+    pub fn get_flags(&self) -> IfAddrFlags {
         self.with_ifaddr(|ifa| ifa.get_flags())
     }
 
@@ -127,8 +169,8 @@ impl Addr {
         self.with_ifaddr(|ifa| ifa.get_prefix_len())
     }
 
-    pub fn get_scope(&self) -> u8 {
-        self.with_ifaddr(|ifa| ifa.get_flags())
+    pub fn get_scope(&self) -> Scope {
+        self.with_ifaddr(|ifa| ifa.get_scope())
     }
 
     pub fn get_link_index(&self) -> u32 {
@@ -161,6 +203,14 @@ impl Addr {
         let family = self.with_ifaddr(|ifa| ifa.get_family());
         self.with_rta(IFA_BROADCAST, |rta| {
             Self::ip_from_family_and_bytes(family, rta.payload())
+        })
+    }
+
+    pub fn get_label(&self) -> Option<String> {
+        use std::ffi::CStr;
+        self.with_rta(IFA_LABEL, |rta| {
+            let cstr = CStr::from_bytes_with_nul(rta.payload()).unwrap();
+            cstr.to_owned().into_string().unwrap()
         })
     }
 
@@ -254,7 +304,7 @@ impl Addr {
                         println!(" ├ LABEL: {:?}", CStr::from_bytes_with_nul(rta.payload()));
                     },
                     IFA_CACHEINFO => {
-                        println!(" ├ CACHEINFO: {:?}", rta.payload());
+                        println!(" ├ CACHEINFO: {:?}", CacheInfoPacket::new(rta.payload()).unwrap());
                     },
                     _ => println!(" ├ {:?}", rta),
                 }
@@ -281,7 +331,6 @@ fn dump_addrs() {
     let mut addrs = AddrManager::new(&mut conn);
     for addr in addrs.iter_addrs() {
         Addr::dump_addr(addr.packet.get_packet());
-        println!("{:?}", addr.get_ip());
     }
 }
 
