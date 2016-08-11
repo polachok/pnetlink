@@ -43,6 +43,17 @@ pub struct IfAddr {
 }
 
 #[packet]
+pub struct CacheInfo {
+    ifa_prefered: u32le,
+    ifa_valid: u32le,
+    created: u32le, /* created timestamp, hundredths of seconds */
+    updated: u32le, /* updated timestamp, hundredths of seconds */
+    #[payload]
+    #[length="0"]
+    payload: Vec<u8>,
+}
+
+#[packet]
 pub struct RtAttr {
     rta_len: u16le,
     rta_type: u16le,

@@ -35,6 +35,13 @@ bitflags! {
     }
 }
 
+/* Important comment:
+ * IFA_ADDRESS is prefix address, rather than local interface address.
+ * It makes no difference for normally configured broadcast interfaces,
+ * but for point-to-point IFA_ADDRESS is DESTINATION address,
+ * local address is supplied in IFA_LOCAL attribute.
+ */
+
 pub const IFA_UNSPEC: u16 = 0;
 pub const IFA_ADDRESS: u16 = 1;
 pub const IFA_LOCAL: u16 = 2;
@@ -124,10 +131,17 @@ impl Addr {
         self.with_ifaddr(|ifa| ifa.get_flags())
     }
 
-    pub fn get_index(&self) -> u32 {
+    pub fn get_link_index(&self) -> u32 {
         self.with_ifaddr(|ifa| ifa.get_index())
     }
 
+    /// Get address
+    ///
+    /// This is prefix address, rather than local interface address.
+    /// It makes no difference for normally configured broadcast interfaces,
+    /// but for point-to-point it is DESTINATION address,
+    /// local address is supplied by get_local_ip().
+    ///
     pub fn get_ip(&self) -> Option<IpAddr> {
         let family = self.with_ifaddr(|ifa| ifa.get_family());
         self.with_rta(IFA_ADDRESS, |rta| {
@@ -135,6 +149,7 @@ impl Addr {
         })
     }
 
+    /// See get_ip()
     pub fn get_local_ip(&self) -> Option<IpAddr> {
         let family = self.with_ifaddr(|ifa| ifa.get_family());
         self.with_rta(IFA_LOCAL, |rta| {
@@ -148,6 +163,8 @@ impl Addr {
             Self::ip_from_family_and_bytes(family, rta.payload())
         })
     }
+
+    /* TODO: implement get_cache_info() */
 
     // helper methods
     fn with_packet<T,F>(&self, cb: F) -> T
