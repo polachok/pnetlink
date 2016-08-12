@@ -1,4 +1,4 @@
-use packet::route::{CacheInfoPacket,MutableIfInfoPacket,IfAddrPacket,MutableIfAddrPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
+use packet::route::{IfAddrCacheInfoPacket,MutableIfInfoPacket,IfAddrPacket,MutableIfAddrPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
 use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
@@ -377,7 +377,7 @@ impl Addr {
                         println!(" ├ LABEL: {:?}", CStr::from_bytes_with_nul(rta.payload()));
                     },
                     IFA_CACHEINFO => {
-                        println!(" ├ CACHEINFO: {:?}", CacheInfoPacket::new(rta.payload()).unwrap());
+                        println!(" ├ CACHEINFO: {:?}", IfAddrCacheInfoPacket::new(rta.payload()).unwrap());
                     },
                     _ => println!(" ├ {:?}", rta),
                 }

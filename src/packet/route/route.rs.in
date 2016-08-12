@@ -62,7 +62,7 @@ pub struct IfAddr {
 
 /* IfAddr cache_info struct */
 #[packet]
-pub struct CacheInfo {
+pub struct IfAddrCacheInfo {
     ifa_prefered: u32le,
     ifa_valid: u32le,
     created: u32le, /* created timestamp, hundredths of seconds */
@@ -87,6 +87,22 @@ pub struct RtMsg {
     rtm_flags: u32le,
     _padding: u8,
     #[payload]
+    payload: Vec<u8>,
+}
+
+/* rta_cacheinfo: linux/rtnetlink.h */
+#[packet]
+pub struct RouteCacheInfo {
+    rta_clntref: u32le,
+    rta_lastuse: u32le,
+    rta_expires: u32le,
+    rta_error: u32le,
+    rta_used: u32le,
+    rta_id: u32le,
+    rta_ts: u32le,
+    rta_tsusage: u32le,
+    #[payload]
+    #[length="0"]
     payload: Vec<u8>,
 }
 

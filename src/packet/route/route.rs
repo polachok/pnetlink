@@ -1,4 +1,4 @@
-use packet::route::{RtMsgPacket,MutableRtMsgPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket};
+use packet::route::{RouteCacheInfoPacket,RtMsgPacket,MutableRtMsgPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
 use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
@@ -129,7 +129,8 @@ impl Route {
                         println!(" ├ GATEWAY {:?}", ip);
                     },
                     RTA_CACHEINFO => {
-                        println!(" ├ CACHE INFO {:?}", rta.payload())
+                        let pkt = RouteCacheInfoPacket::new(rta.payload());
+                        println!(" ├ CACHE INFO {:?}", pkt);
                     },
                     RTA_SRC => {
                         println!(" ├ SRC {:?}", rta.payload())
