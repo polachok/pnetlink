@@ -60,6 +60,7 @@ pub struct IfAddr {
     payload: Vec<u8>
 }
 
+/* IfAddr cache_info struct */
 #[packet]
 pub struct CacheInfo {
     ifa_prefered: u32le,
@@ -68,6 +69,24 @@ pub struct CacheInfo {
     updated: u32le, /* updated timestamp, hundredths of seconds */
     #[payload]
     #[length="0"]
+    payload: Vec<u8>,
+}
+
+#[packet]
+pub struct RtMsg {
+    rtm_family: u8,
+    rtm_dst_len: u8,
+    rtm_src_len: u8,
+    rtm_tos: u8,
+
+    rtm_table: u8, /* Routing table id */
+    rtm_protocol: u8, /* Routing protocol */
+    #[construct_with(u8)]
+    rtm_scope: Scope,
+
+    rtm_flags: u32le,
+    _padding: u8,
+    #[payload]
     payload: Vec<u8>,
 }
 
