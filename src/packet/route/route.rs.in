@@ -91,6 +91,23 @@ pub struct RtMsg {
 }
 
 #[packet]
+pub struct FibRule {
+    family: u8,
+    dst_len: u8,
+    src_len: u8,
+    tos: u8,
+
+    table: u8,
+    res1: u8,
+    res2: u8,
+    action: u8,
+
+    flags: u32le,
+    #[payload]
+    payload: Vec<u8>,
+}
+
+#[packet]
 pub struct RtAttr {
     rta_len: u16le,
     rta_type: u16le,
