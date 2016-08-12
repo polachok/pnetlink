@@ -111,6 +111,33 @@ pub enum IpAddr {
     V6(Ipv6Addr),
 }
 
+impl IpAddr {
+    fn bytes(&self) -> Vec<u8> {
+        match self {
+            &IpAddr::V4(ip) => {
+                let mut v = Vec::new();
+                v.extend_from_slice(&ip.octets()[..]);
+                v
+            },
+            &IpAddr::V6(ip) => {
+                panic!("not implemented"); /* FIXME */
+            }
+        }
+    }
+}
+
+impl From<Ipv6Addr> for IpAddr {
+    fn from(addr: Ipv6Addr) -> Self {
+        IpAddr::V6(addr)
+    }
+}
+
+impl From<Ipv4Addr> for IpAddr {
+    fn from(addr: Ipv4Addr) -> Self {
+        IpAddr::V4(addr)
+    }
+}
+
 impl ::std::fmt::Debug for IpAddr {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         match self {
@@ -118,11 +145,6 @@ impl ::std::fmt::Debug for IpAddr {
             &IpAddr::V6(ip) => ip.fmt(f),
         }
     }
-}
-
-#[derive(Clone,Debug)]
-pub struct Addr {
-    packet: NetlinkBuf,
 }
 
 pub struct AddrManager<'a> {
@@ -154,6 +176,57 @@ impl<'a> AddrManager<'a> {
         let mut reply = self.conn.send(req.get_packet());
         AddrsIterator { iter: reply.into_iter() }
     }
+
+    pub fn add_addr<'b>(&'a mut self, link: &'b Link, addr: IpAddr, scope: Scope) {
+        let link_index = link.get_index();
+        let family = match addr {
+            IpAddr::V4(_) => 2,
+            IpAddr::V6(_) => 10,
+        };
+        let prefix_len = 32; /* XXX: FIXME */
+        let mut buf = vec![0; MutableIfAddrPacket::minimum_packet_size()];
+        let mut rta_buf = vec![0; MutableRtAttrPacket::minimum_packet_size() + 4];
+        let mut rta_buf1 = vec![0; MutableRtAttrPacket::minimum_packet_size() + 4];
+        let req = IfAddrRequestBuilder::new().with_ifa(|mut ifaddr| {
+                ifaddr.set_index(link_index);
+                ifaddr.set_family(family);
+                ifaddr.set_scope(scope);
+                ifaddr.set_prefix_len(prefix_len);
+        }).append({
+            {
+                let mut pkt = MutableRtAttrPacket::new(&mut rta_buf).unwrap();
+                pkt.set_rta_len(4 + 4 /* FIXME: hardcoded ipv4 */);
+                pkt.set_rta_type(IFA_ADDRESS);
+                let mut pl = pkt.payload_mut();
+                pl.copy_from_slice(&addr.bytes()[0..4]);
+            }
+            RtAttrPacket::new(&mut rta_buf).unwrap()
+        }).append({
+            {
+                let mut pkt = MutableRtAttrPacket::new(&mut rta_buf1).unwrap();
+                pkt.set_rta_len(4 + 4 /* FIXME: hardcoded ipv4 */);
+                pkt.set_rta_type(IFA_LOCAL);
+                let mut pl = pkt.payload_mut();
+                pl.copy_from_slice(&addr.bytes()[0..4]);
+            }
+            RtAttrPacket::new(&mut rta_buf1).unwrap()
+        }).build();
+        let req = NetlinkRequestBuilder::new(RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
+            .append(req.get_packet()).build();
+        let mut reply = self.conn.send(req.get_packet());
+        for p in reply.into_iter() {
+            let packet = p.get_packet();
+            if packet.get_kind() == NLMSG_ERROR {
+                let err = NetlinkErrorPacket::new(packet.payload()).unwrap();
+                println!("{:?}", io::Error::from_raw_os_error(-(err.get_error() as i32)));
+            }
+        }
+    }
+}
+
+#[derive(Clone,Debug)]
+pub struct Addr {
+    packet: NetlinkBuf,
 }
 
 impl Addr {
@@ -325,6 +398,51 @@ impl Addr {
     }
 }
 
+struct IfAddrPacketBuf {
+    data: Vec<u8>,
+}
+
+impl IfAddrPacketBuf {
+    pub fn get_packet(&self) -> IfAddrPacket {
+        IfAddrPacket::new(&self.data[..]).unwrap()
+    }
+}
+
+struct IfAddrRequestBuilder {
+    data: Vec<u8>,
+}
+
+impl IfAddrRequestBuilder {
+    pub fn new() -> Self {
+        let data = vec![0; MutableIfAddrPacket::minimum_packet_size()];
+        IfAddrRequestBuilder { data: data }
+    }
+
+    pub fn with_ifa<F>(mut self, f: F) -> Self
+        where F: Fn(MutableIfAddrPacket) -> () {
+        {
+            let pkt = MutableIfAddrPacket::new(&mut self.data[..]).unwrap();
+            f(pkt);
+        }
+        self
+    }
+
+    pub fn append(mut self, rta: RtAttrPacket) -> Self {
+        let len = rta.get_rta_len() as usize;
+        let aligned_len = ::util::align(len);
+        self.data.extend_from_slice(&rta.packet()[0..len]);
+        // add padding for alignment
+        for _ in len..aligned_len {
+            self.data.push(0);
+        }
+        self
+    }
+
+    pub fn build(self) -> IfAddrPacketBuf {
+        IfAddrPacketBuf { data: self.data }
+    }
+}
+
 #[test]
 fn dump_addrs() {
     let mut conn = NetlinkConnection::new();
@@ -342,4 +460,25 @@ fn check_lo_addr() {
     let mut addrs = AddrManager::new(&mut conn);
     let mut addrs = addrs.get_link_addrs(&lo);
     assert!(addrs.find(|addr| addr.get_ip() == Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))).is_some());
+}
+
+#[test]
+fn add_lo_addr() {
+     use packet::route::link::LinkManager;
+    let mut conn = NetlinkConnection::new();
+    let lo = LinkManager::new(&mut conn).get_link_by_name("lo").unwrap();
+    let mut addrman = AddrManager::new(&mut conn);
+    /*
+    {
+        let mut addrs = addrman.get_link_addrs(&lo);
+        assert!(addrs.find(|addr| addr.get_ip() == Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))).is_some());
+    }
+    */
+    addrman.add_addr(&lo, IpAddr::from(Ipv4Addr::new(127, 0, 0, 5)), Scope::Host);
+    /*
+    {
+        let mut addrs = addrman.get_link_addrs(&lo);
+        assert!(addrs.find(|addr| addr.get_ip() == Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 5)))).is_some());
+    }
+    */
 }
