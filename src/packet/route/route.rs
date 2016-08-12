@@ -20,6 +20,14 @@ pub const RTM_NEWROUTE: u16 = 24;
 pub const RTM_DELROUTE: u16 = 25;
 pub const RTM_GETROUTE: u16 = 26;
 
+/* Reserved table identifiers */
+pub const RT_TABLE_UNSPEC: u32 = 0;
+/* User defined values */
+pub const RT_TABLE_COMPAT: u32 = 252;
+pub const RT_TABLE_DEFAULT: u32 = 253;
+pub const RT_TABLE_MAIN: u32 = 254;
+pub const RT_TABLE_LOCAL: u32 = 255;
+
 #[repr(u8)]
 enum RtmType {
     UNICAST,            /* Gateway or direct route      */
