@@ -2,7 +2,7 @@ extern crate pnetlink;
 
 use pnetlink::packet::netlink::NetlinkConnection;
 use pnetlink::packet::route::link::{Links,Link};
-use pnetlink::packet::route::addr::{AddrManager,Addr};
+use pnetlink::packet::route::addr::{Addresses,Addr};
 
 fn print_link(link: &Link) {
     println!("{}: {}: <{:?}> mtu {:?} qdisc {} state {:?}", link.get_index(), link.get_name().unwrap(),
@@ -38,8 +38,7 @@ fn main() {
     let links = conn.iter_links().unwrap().collect::<Vec<_>>();
     for link in links {
         print_link(&link);
-        let mut addr_man = AddrManager::new(&mut conn);
-        for addr in addr_man.get_link_addrs(&link) {
+        for addr in conn.get_link_addrs(None, &link).unwrap() {
             //println!("{:?}", addr.get_ip());
             print_addr(&addr);
         }

@@ -11,7 +11,7 @@ use pnet::packet::Packet;
 use pnet::packet::PacketSize;
 use pnet::util::MacAddr;
 use libc;
-use std::io::{Read,Cursor,self};
+use std::io::{Read,Write,Cursor,self};
 use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
 use std::net::{Ipv4Addr,Ipv6Addr};
 
@@ -148,25 +148,14 @@ impl ::std::fmt::Debug for IpAddr {
     }
 }
 
-pub struct AddrManager<'a> {
-    conn: &'a mut NetlinkConnection,
+pub trait Addresses where Self: Read + Write {
+    fn iter_addrs<'a>(&'a mut self, family: Option<u8>) -> io::Result<Box<Iterator<Item = Addr> + 'a>>;
+    fn get_link_addrs<'a,'b>(&'a mut self, family: Option<u8>, link: &'b Link) -> io::Result<Box<Iterator<Item = Addr> + 'a>>;
+    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, scope: Scope) -> io::Result<()>;
 }
 
-impl<'a> AddrManager<'a> {
-    pub fn new(conn: &'a mut NetlinkConnection) -> Self {
-        AddrManager { conn: conn }
-    }
-
-    pub fn get_link_addrs<'b>(&'a mut self, link: &'b Link) -> Box<Iterator<Item = Addr> + 'a> {
-        let idx = link.get_index();
-        Box::new(self.make_addr_iter(None).filter(move |addr| addr.with_ifaddr(|ifa| ifa.get_index() == idx)))
-    }
-
-    pub fn iter_addrs(&'a mut self) -> AddrsIterator<&'a mut NetlinkConnection> {
-        self.make_addr_iter(None)
-    }
-
-    fn make_addr_iter(&'a mut self, family: Option<u8>) -> AddrsIterator<&'a mut NetlinkConnection> {
+impl Addresses for NetlinkConnection {
+    fn iter_addrs<'a>(&'a mut self, family: Option<u8>) -> io::Result<Box<Iterator<Item = Addr> + 'a>> {
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
         let req = NetlinkRequestBuilder::new(RTM_GETADDR, NLM_F_DUMP)
             .append({
@@ -174,11 +163,28 @@ impl<'a> AddrManager<'a> {
                 ifinfo.set_family(family.unwrap_or(0));
                 ifinfo
             }).build();
-        let mut reply = self.conn.send(req.get_packet());
-        AddrsIterator { iter: reply.into_iter() }
+        try!(self.write(req.get_packet().packet()));
+        let reader = NetlinkReader::new(self);
+        let iter = AddrsIterator { iter: reader.into_iter() };
+        Ok(Box::new(iter))
     }
 
-    pub fn add_addr<'b>(&'a mut self, link: &'b Link, addr: IpAddr, scope: Scope) {
+    fn get_link_addrs<'a,'b>(&'a mut self, family: Option<u8>, link: &'b Link) -> io::Result<Box<Iterator<Item = Addr> + 'a>> {
+        let idx = link.get_index();
+        let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
+        let req = NetlinkRequestBuilder::new(RTM_GETADDR, NLM_F_DUMP)
+            .append({
+                let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
+                ifinfo.set_family(family.unwrap_or(0));
+                ifinfo
+            }).build();
+        try!(self.write(req.get_packet().packet()));
+        let reader = NetlinkReader::new(self);
+        let iter = AddrsIterator { iter: reader.into_iter() };
+        Ok(Box::new(iter.filter(move |addr| addr.with_ifaddr(|ifa| ifa.get_index() == idx))))
+    }
+
+    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, scope: Scope) -> io::Result<()> {
         let link_index = link.get_index();
         let family = match addr {
             IpAddr::V4(_) => 2,
@@ -214,14 +220,9 @@ impl<'a> AddrManager<'a> {
         }).build();
         let req = NetlinkRequestBuilder::new(RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
             .append(req.get_packet()).build();
-        let mut reply = self.conn.send(req.get_packet());
-        for p in reply.into_iter() {
-            let packet = p.get_packet();
-            if packet.get_kind() == NLMSG_ERROR {
-                let err = NetlinkErrorPacket::new(packet.payload()).unwrap();
-                println!("{:?}", io::Error::from_raw_os_error(-(err.get_error() as i32)));
-            }
-        }
+        self.write(req.get_packet().packet());
+        let reader = NetlinkReader::new(self);
+        reader.read_to_end()
     }
 }
 
@@ -444,16 +445,18 @@ impl IfAddrRequestBuilder {
     }
 }
 
-/*
 #[test]
 fn dump_addrs() {
+    use packet::netlink::NetlinkConnection;
+    use packet::route::addr::Addresses;
+
     let mut conn = NetlinkConnection::new();
-    let mut addrs = AddrManager::new(&mut conn);
-    for addr in addrs.iter_addrs() {
+    for addr in conn.iter_addrs(None).unwrap() {
         Addr::dump_addr(addr.packet.get_packet());
     }
 }
 
+/*
 #[test]
 fn check_lo_addr() {
     use packet::route::link::LinkManager;
