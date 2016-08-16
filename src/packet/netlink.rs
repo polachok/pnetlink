@@ -2,7 +2,7 @@ use ::socket::{NetlinkSocket,NetlinkProtocol};
 use libc;
 use std::mem;
 use std::io;
-use std::io::{Read,BufRead,BufReader};
+use std::io::{Read,BufRead,BufReader,Write};
 use std::marker::PhantomData;
 use pnet::packet::{Packet,PacketSize,FromPacket};
 
@@ -83,7 +83,7 @@ fn read_ip_link_dump_2() {
 
     let f = File::open("dumps/ip_link.bin").unwrap();
     let mut r = BufReader::new(f);
-    let mut reader = NetlinkReader::new(r);
+    let mut reader = NetlinkReader::new(&mut r);
     while let Ok(Some(pkt)) = reader.read_netlink() {
         let pkt = pkt.get_packet();
         println!("{:?}", pkt);
@@ -102,7 +102,7 @@ fn read_ip_link_sock() {
     use std::io::Read;
 
     let mut r = NetlinkSocket::bind(NetlinkProtocol::Route, 0 as u32).unwrap();
-    let mut reader = NetlinkReader::new(r);
+    let mut reader = NetlinkReader::new(&mut r);
     while let Ok(Some(pkt)) = reader.read_netlink() {
         let pkt = pkt.get_packet();
         println!("{:?}", pkt);
@@ -145,13 +145,29 @@ enum NetlinkReaderState {
 }
 
 impl<R: Read> NetlinkReader<R> {
-    fn new(reader: R) -> Self {
+    pub fn new(reader: R) -> Self {
         NetlinkReader {
             reader: reader,
             buf: vec![],
             read_at: 0,
             state: NetlinkReaderState::NeedMore,
         }
+    }
+
+    /// Read to end ignoring everything but errors
+    pub fn read_to_end(self) -> io::Result<()> {
+        for pkt in self.into_iter() {
+            let packet = pkt.get_packet();
+            if packet.get_kind() == NLMSG_ERROR {
+                let err = NetlinkErrorPacket::new(packet.payload()).unwrap();
+                if err.get_error() != 0 {
+                    return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
+                } else {
+                    break; // ACK
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -260,6 +276,17 @@ impl ::std::io::Read for NetlinkConnection {
         self.sock.read(buf)
     }
 }
+
+impl ::std::io::Write for NetlinkConnection {
+    fn write(&mut self, buf: &[u8]) -> ::std::io::Result<usize> {
+        self.sock.send(buf)
+    }
+
+    fn flush(&mut self) -> ::std::io::Result<()> {
+        Ok(())
+    }
+}
+
 
 pub struct NetlinkRequestBuilder {
     data: Vec<u8>,

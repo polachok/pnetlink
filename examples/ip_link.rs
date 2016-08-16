@@ -1,7 +1,7 @@
 extern crate pnetlink;
 
 use pnetlink::packet::netlink::NetlinkConnection;
-use pnetlink::packet::route::link::{LinkManager,Link};
+use pnetlink::packet::route::link::{Links,Link};
 use pnetlink::packet::route::addr::{AddrManager,Addr};
 
 fn print_link(link: &Link) {
@@ -35,7 +35,7 @@ fn print_addr(addr: &Addr) {
 
 fn main() {
     let mut conn = NetlinkConnection::new();
-    let links = LinkManager::new(&mut conn).iter_links().collect::<Vec<_>>();
+    let links = conn.iter_links().unwrap().collect::<Vec<_>>();
     for link in links {
         print_link(&link);
         let mut addr_man = AddrManager::new(&mut conn);

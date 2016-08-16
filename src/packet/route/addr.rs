@@ -105,6 +105,7 @@ impl<R: Read> Iterator for AddrsIterator<R> {
     }
 }
 
+/// Abstract over IP versions
 #[derive(Eq,PartialEq)]
 pub enum IpAddr {
     V4(Ipv4Addr),
@@ -443,6 +444,7 @@ impl IfAddrRequestBuilder {
     }
 }
 
+/*
 #[test]
 fn dump_addrs() {
     let mut conn = NetlinkConnection::new();
@@ -482,3 +484,4 @@ fn add_lo_addr() {
     }
     */
 }
+*/

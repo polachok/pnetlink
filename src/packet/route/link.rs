@@ -10,7 +10,7 @@ use pnet::packet::Packet;
 use pnet::packet::PacketSize;
 use pnet::util::MacAddr;
 use libc;
-use std::io::{Read,self};
+use std::io::{Read,Write,self};
 
 /* rt message types */
 pub const RTM_NEWLINK: u16 = 16;
@@ -172,71 +172,77 @@ impl<R: Read> Iterator for LinksIterator<R> {
 
 impl ::std::fmt::Debug for Link {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        try!(write!(f, "{}: {:?}: <{:?}> mtu {:?} qdisc {:?} state {:?}\n", self.get_index(), self.get_name(),
-                self.get_flags(), self.get_mtu(), self.get_qdisc(), self.get_state()));
-        write!(f, "   Link/{:?} {:?} brd {:?}", self.get_type(), self.get_hw_addr(), self.get_broadcast())
+        write!(f, "{}: {:?}", self.get_index(), self.get_name())
     }
 }
 
-pub struct LinkManager<'a> {
-    conn: &'a mut NetlinkConnection,
+pub trait Links where Self: Read + Write {
+    /// iterate over links
+    fn iter_links(&mut self) -> io::Result<Box<LinksIterator<&mut Self>>>;
+    /// returns link by its index
+    fn get_link_by_index(&mut self, index: u32) -> io::Result<Option<Link>>;
+    /// returns link by its name
+    fn get_link_by_name(&mut self, name: &str) -> io::Result<Option<Link>>;
+    /// delete link
+    fn delete_link(&mut self, link: Link) -> io::Result<()>;
+    /// create dummy link
+    fn new_dummy_link(&mut self, name: &str) -> io::Result<()>;
 }
 
-impl<'a> LinkManager<'a> {
-    pub fn new(conn: &'a mut NetlinkConnection) -> Self {
-        LinkManager { conn: conn }
-    }
-
-    pub fn iter_links(&mut self) -> LinksIterator<&mut NetlinkConnection> {
-        let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
+impl Links for NetlinkConnection {
+    fn iter_links(&mut self) -> io::Result<Box<LinksIterator<&mut Self>>> {
         let req = NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_DUMP)
-        .append({
-            let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
-            ifinfo.set_family(0 /* AF_UNSPEC */);
-            ifinfo
-        }).build();
-        let mut reply = self.conn.send(req.get_packet());
-        LinksIterator { iter: reply.into_iter() }
+            .append(
+                IfInfoPacketBuilder::new()
+                    .build()
+                    .get_packet()
+            ).build();
+        try!(self.write(req.get_packet().packet()));
+        let reader = NetlinkReader::new(self);
+        Ok(Box::new(LinksIterator { iter: reader.into_iter() }))
     }
 
-    pub fn get_link_by_index(&mut self, index: u32) -> Option<Link> {
+    fn get_link_by_index(&mut self, index: u32) -> io::Result<Option<Link>> {
         let mut req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
             NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK)
-            .append({
-                let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
-                ifinfo.set_family(0 /* AF_UNSPEC */);
-                ifinfo.set_index(index);
-                ifinfo
-            }).build()
+            .append(
+                IfInfoPacketBuilder::new()
+                    .set_index(index)
+                    .build()
+                    .get_packet()
+            ).build()
         };
-        let mut reply = self.conn.send(req.get_packet());
-        let li = LinksIterator { iter: reply.into_iter() };
-        li.last()
+        try!(self.write(req.get_packet().packet()));
+        let reader = NetlinkReader::new(self);
+        let li = LinksIterator { iter: reader.into_iter() };
+        Ok(li.last())
     }
 
-    pub fn get_link_by_name(&mut self, name: &str) -> Option<Link> {
+    fn get_link_by_name(&mut self, name: &str) -> io::Result<Option<Link>> {
         let req = {
             let name_len = name.as_bytes().len();
-            let mut buf = vec![0; RtAttrPacket::minimum_packet_size() + name_len + 1];
-            let ifi = IfInfoPacketBuilder::new().append({
-                {
-                    let mut ifname_rta = MutableRtAttrPacket::new(&mut buf).unwrap();
-                    ifname_rta.set_rta_type(IFLA_IFNAME);
-                    ifname_rta.set_rta_len((RtAttrPacket::minimum_packet_size() + name_len + 1) as u16);
-                    let mut payload = ifname_rta.payload_mut();
-                    payload[0..name_len].copy_from_slice(name.as_bytes());
-                }
-                RtAttrPacket::new(&buf[..]).unwrap()
-            }).build();
-            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK).append(ifi.get_packet()).build()
+            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK).append({
+                let mut buf = vec![0; RtAttrPacket::minimum_packet_size() + name_len + 1];
+                IfInfoPacketBuilder::new().append({
+                    {
+                        let mut ifname_rta = MutableRtAttrPacket::new(&mut buf).unwrap();
+                        ifname_rta.set_rta_type(IFLA_IFNAME);
+                        ifname_rta.set_rta_len((RtAttrPacket::minimum_packet_size() + name_len + 1) as u16);
+                        let mut payload = ifname_rta.payload_mut();
+                        payload[0..name_len].copy_from_slice(name.as_bytes());
+                    }
+                    RtAttrPacket::new(&buf[..]).unwrap()
+                }).build().get_packet()
+            }).build()
         };
-        let mut reply = self.conn.send(req.get_packet());
-        let li = LinksIterator { iter: reply.into_iter() };
-        li.last()
+        try!(self.write(req.get_packet().packet()));
+        let reader = NetlinkReader::new(self);
+        let li = LinksIterator { iter: reader.into_iter() };
+        Ok(li.last())
     }
 
-    pub fn new_dummy_link(&mut self, name: &str) -> io::Result<Link> {
+    fn new_dummy_link(&mut self, name: &str) -> io::Result<()> {
         let mut ifi = {
             let mut buf = vec![0; 32];
             let name_len = name.as_bytes().len();
@@ -268,23 +274,12 @@ impl<'a> LinkManager<'a> {
         };
         let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
             .append(ifi.get_packet()).build();
-        {
-            let mut reply = self.conn.send(req.get_packet());
-            for pkt in reply {
-                let pkt = pkt.get_packet();
-                if pkt.get_kind() == NLMSG_ERROR {
-                    let err = NetlinkErrorPacket::new(pkt.payload()).unwrap();
-                    if err.get_error() != 0 {
-                        return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
-                    }
-                    break;
-                }
-            }
-        }
-        Ok(self.get_link_by_name(name).unwrap())
+        try!(self.write(req.get_packet().packet()));
+        let reader = NetlinkReader::new(self);
+        reader.read_to_end()
     }
 
-    pub fn delete(&mut self, link: Link) -> io::Result<()> {
+    fn delete_link(&mut self, link: Link) -> io::Result<()> {
         let index = link.get_index();
         let mut req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
@@ -296,17 +291,10 @@ impl<'a> LinkManager<'a> {
                 ifinfo
             }).build()
         };
-        let mut reply = self.conn.send(req.get_packet());
-        for p in reply.into_iter() {
-            let packet = p.get_packet();
-            if packet.get_kind() == NLMSG_ERROR {
-                let err = NetlinkErrorPacket::new(packet.payload()).unwrap();
-                return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
-            }
-        }
-        Ok(())
+        try!(self.write(req.get_packet().packet()));
+        let reader = NetlinkReader::new(self);
+        reader.read_to_end()
     }
-
 }
 
 impl Link {
@@ -475,6 +463,14 @@ impl IfInfoPacketBuilder {
         self
     }
 
+    pub fn set_index(mut self, index: u32) -> Self {
+        {
+            let mut pkt = MutableIfInfoPacket::new(&mut self.data[..]).unwrap();
+            pkt.set_index(index);
+        }
+        self
+    }
+
     pub fn set_type(mut self, type_: IfType) -> Self {
         {
             let mut pkt = MutableIfInfoPacket::new(&mut self.data[..]).unwrap();
@@ -507,29 +503,47 @@ impl IfInfoPacketBuilder {
     }
 }
 
-#[test]
-fn find_lo() {
-    let mut conn = NetlinkConnection::new();
-    let mut links = LinkManager::new(&mut conn);
-    let lo0 = links.get_link_by_name("lo");
-    assert!(lo0.is_some());
-    let lo0 = lo0.unwrap();
-    let idx = lo0.get_index();
-    let lo1 = links.get_link_by_index(idx);
-    assert!(lo1.is_some());
-    let lo1 = lo1.unwrap();
-    assert!(lo1.get_name() == lo0.get_name());
-}
 
-#[test]
-// root permissions required
-fn create_and_delete_link() {
-    let mut conn = NetlinkConnection::new();
-    let mut links = LinkManager::new(&mut conn);
-    let link = links.new_dummy_link("test1488");
-    let link = link.unwrap();
-    assert!(link.get_name() == Some("test1488".to_owned()));
-    links.iter_links().find(|link| link.get_name() == Some("test1488".to_owned())).is_some();
-    links.delete(link);
-    links.iter_links().find(|link| link.get_name() == Some("test1488".to_owned())).is_none();
+mod tests {
+    #[test]
+    fn dump_links() {
+        use ::packet::netlink::NetlinkConnection;
+        use ::packet::route::link::{Link,Links};
+        let mut conn = NetlinkConnection::new();
+        for link in conn.iter_links().unwrap() {
+            Link::dump_link(link.packet.get_packet());
+        }
+    }
+
+    #[test]
+    fn find_lo() {
+        use ::packet::netlink::NetlinkConnection;
+        use ::packet::route::link::{Link,Links};
+
+        let mut conn = NetlinkConnection::new();
+        let lo0 = conn.get_link_by_name("lo").unwrap();
+        assert!(lo0.is_some());
+        let lo0 = lo0.unwrap();
+        let idx = lo0.get_index();
+        let lo1 = conn.get_link_by_index(idx).unwrap();
+        assert!(lo1.is_some());
+        let lo1 = lo1.unwrap();
+        assert!(lo1.get_name() == lo0.get_name());
+    }
+
+    #[test]
+    // root permissions required
+    fn create_and_delete_link() {
+        use ::packet::netlink::NetlinkConnection;
+        use ::packet::route::link::{Link,Links};
+
+        let mut conn = NetlinkConnection::new();
+        conn.new_dummy_link("test1488").unwrap();
+        let link = conn.get_link_by_name("test1488").unwrap().unwrap();
+        assert!(link.get_name() == Some("test1488".to_owned()));
+        conn.iter_links().unwrap().find(|link| link.get_name() == Some("test1488".to_owned())).is_some();
+        conn.delete_link(link);
+        conn.iter_links().unwrap().find(|link| link.get_name() == Some("test1488".to_owned())).is_none();
+    }
+
 }
