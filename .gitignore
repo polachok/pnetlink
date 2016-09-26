@@ -1,4 +1,5 @@
 /target
 .*.swp
-.*~
+*~
+*.bk
 /Cargo.lock
