@@ -318,7 +318,8 @@ impl Addr {
         })
     }
 
-    fn ip_from_family_and_bytes(family: u8, bytes: &[u8]) -> IpAddr {
+    /// Extract an IP address from a buffer.
+    pub fn ip_from_family_and_bytes(family: u8, bytes: &[u8]) -> IpAddr {
         let mut cur = Cursor::new(bytes);
         match family {
             2 /* AF_INET */ => IpAddr::V4(Ipv4Addr::from(cur.read_u32::<BigEndian>().unwrap())),

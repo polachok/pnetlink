@@ -2,6 +2,7 @@ use pnet_macros_support::types::*;
 use pnet::packet::PrimitiveValues;
 use packet::route::link::{IfFlags,IfType};
 use packet::route::addr::{IfAddrFlags,Scope};
+use packet::route::neighbour::{NeighbourFlags,NeighbourState};
 
 #[packet]
 pub struct IfInfo {
@@ -70,6 +71,35 @@ pub struct IfAddrCacheInfo {
     #[payload]
     #[length="0"]
     payload: Vec<u8>,
+}
+
+#[packet]
+pub struct NeighbourDiscovery {
+    family: u8,
+    pad1: u8,
+    pad2: u16le,
+    ifindex: u32le, // Should be i32le, not implemented?
+    #[construct_with(u16le)]
+    state: NeighbourState,
+    #[construct_with(u8)]
+    flags: NeighbourFlags,
+    type_: u8,
+    #[payload]
+    payload: Vec<u8>,
+}
+
+impl PrimitiveValues for NeighbourFlags {
+    type T = (u8,);
+    fn to_primitive_values(&self) -> (u8,) {
+        (self.bits(),)
+    }
+}
+
+impl PrimitiveValues for NeighbourState {
+    type T = (u16,);
+    fn to_primitive_values(&self) -> (u16,) {
+        (self.bits(),)
+    }
 }
 
 #[packet]
