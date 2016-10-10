@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["root"]
 build = "build.rs"
 
-
 [build-dependencies.pnet_macros]
 git = "https://github.com/polachok/libpnet"
 branch = "le"
@@ -14,10 +13,12 @@ features = [ "with-syntex" ]
 version = "0.1.0"
 
 [dependencies.pnet]
-version = "0.9.0"
+git = "https://github.com/polachok/libpnet"
+branch = "le"
+features = [ "with-syntex" ]
 
 [build-dependencies.syntex]
-version = "0.31"
+version = "0.42"
 
 [dependencies]
 libc = "0.2"
