@@ -10,8 +10,9 @@ use pnet::packet::PacketSize;
 use libc;
 use std::io::Read;
 
-pub mod link;
 pub mod addr;
+pub mod link;
+pub mod neighbour;
 pub mod route;
 pub mod rule;
 
