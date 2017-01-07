@@ -1,10 +1,13 @@
 extern crate libc;
+extern crate mio;
 
 use libc::{c_int,c_void};
 use libc::{socket,bind,send,recvfrom,setsockopt,getsockopt};
 use std::os::unix::io::{AsRawFd,RawFd};
-use std::io::{Error,Result};
-use std::io::Read;
+use std::io::{self,Error,Result,Read};
+
+use self::mio::unix::EventedFd;
+use self::mio::{Evented, Poll, Token, Ready, PollOpt};
 
 mod ffi {
 	use libc::{c_int, sa_family_t, c_short};
@@ -93,6 +96,13 @@ impl NetlinkSocket {
 			return Err(Error::last_os_error());
 		}
 		let sock = NetlinkSocket { fd: res };
+		let mut nonblocking = 1 as libc::c_ulong;
+        res = unsafe {
+			libc::ioctl(sock.fd, libc::FIONBIO, &mut nonblocking)
+		};
+		if res < 0 {
+			return Err(Error::last_os_error());
+		}
 		let mut sockaddr = ffi::sockaddr_nl {
 			nl_family: ffi::PF_NETLINK as u16,
 			nl_pad: 0,
@@ -187,4 +197,26 @@ impl Read for NetlinkSocket {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
 		self.recv(buf)
 	}
+}
+
+impl Evented for NetlinkSocket {
+    fn register(&self,
+                poll: &Poll,
+                token: Token,
+                events: Ready,
+                opts: PollOpt) -> io::Result<()> {
+        EventedFd(&self.as_raw_fd()).register(poll, token, events, opts)
+    }
+
+    fn reregister(&self,
+                  poll: &Poll,
+                  token: Token,
+                  events: Ready,
+                  opts: PollOpt) -> io::Result<()> {
+        EventedFd(&self.as_raw_fd()).reregister(poll, token, events, opts)
+    }
+
+    fn deregister(&self, poll: &Poll) -> io::Result<()> {
+        EventedFd(&self.as_raw_fd()).deregister(poll)
+    }
 }
