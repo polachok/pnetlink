@@ -10,7 +10,8 @@ branch = "le"
 features = [ "with-syntex" ]
 
 [dependencies.pnet_macros_support]
-version = "0.1.0"
+git = "https://github.com/polachok/libpnet"
+branch = "le"
 
 [dependencies.pnet]
 git = "https://github.com/polachok/libpnet"
