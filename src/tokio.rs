@@ -6,6 +6,7 @@ use std::io;
 use ::socket;
 use ::packet::netlink::{NetlinkPacket,MutableNetlinkPacket,NetlinkMsgFlags,self};
 use ::packet::route::{IfInfoPacket,MutableIfInfoPacket};
+use ::packet::route::link::{Link};
 use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
 use pnet::packet::{Packet,PacketSize,FromPacket};
 
@@ -38,6 +39,24 @@ impl NetlinkSocket {
 impl io::Read for NetlinkSocket {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.io.read(buf)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        buf.resize(4096, 0);
+        let mut write_at = 0;
+        loop {
+            match self.read(&mut buf[write_at..]) {
+                Ok(n) => {
+                    write_at += n;
+                },
+                Err(e) => {
+                    buf.truncate(write_at);
+                    return Err(e);
+                }
+            }
+        }
+        buf.truncate(write_at);
+        return Ok(write_at);
     }
 }
 
@@ -77,15 +96,19 @@ impl Codec for NetlinkCodec {
     fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<Self::In>> {
         let (owned_pkt, len) = {
             let slice = buf.as_slice();
-            println!("SLICE: {:?}", slice);
+            if slice.len() == 0 {
+                return Ok(None);
+            }
             if let Some(pkt) = NetlinkPacket::new(slice) {
-                println!("{:?} slice: {}", pkt, slice.len());
-                if pkt.get_length() as usize > slice.len() {
+                //println!("{:?} slice: {}", pkt, slice.len());
+                let aligned_len = ::util::align(pkt.get_length() as usize);
+                if aligned_len > slice.len() {
                     println!("NEED MORE BYTES");
                     return Ok(None);
                 }
-                (NetlinkPacket::owned(slice.to_owned()), pkt.get_length())
+                (NetlinkPacket::owned(slice[..pkt.get_length() as usize].to_owned()), aligned_len)
             } else {
+                println!("SLICE: {:?}/{}", slice, slice.len());
                 unimplemented!();
             }
         };
@@ -161,9 +184,113 @@ fn try_tokio_conn() {
             MutableIfInfoPacket::owned(data).unwrap()
         }
     ).build();
-    let f = framed.send(pkt).and_then(|f| f.into_future().map_err(|(e, _)| e))
-    .and_then(|(x, y)| {
-         println!("RECEIVED FRAME: {:?}", x); Ok(())
+    /*
+    let f = framed.send(pkt).and_then(|s| 
+        s.into_future().map_err(|(e, _)| {
+        println!("E: {:?}", e);
+        e
+    } ))
+    .and_then(|(frame, stream)| {
+         println!("RECEIVED FRAME: {:?}", frame); Ok(stream)
     });
-    l.run(f);
+    */
+    let f = framed.send(pkt).and_then(|stream|
+        stream.for_each(|frame| {
+            println!("RECEIVED FRAME: {:?}", frame);
+            if frame.get_kind() == 16 /* NEW LINK */ {
+                Link::dump_link(frame);
+            }
+            Ok(())
+        })
+    );
+    let s = l.run(f);
+}
+
+#[test]
+fn try_mio_conn() {
+    use mio::*;
+
+    let poll = Poll::new().unwrap();
+    let mut sock = socket::NetlinkSocket::bind(socket::NetlinkProtocol::Route, 0).unwrap();
+    poll.register(&sock, Token(0), Ready::writable() | Ready::readable(),
+              PollOpt::edge()).unwrap();
+
+    let pkt = NetlinkRequestBuilder::new(18 /* RTM GETLINK */, NLM_F_DUMP).append(
+        {
+            let len = MutableIfInfoPacket::minimum_packet_size();
+            let mut data = vec![0; len];
+            MutableIfInfoPacket::owned(data).unwrap()
+        }
+    ).build();
+
+    let mut buf = vec![0;4096];
+    let mut pos: usize = 0;
+    let mut events = Events::with_capacity(1024);
+    let mut written = false;
+    loop {
+        poll.poll(&mut events, None).unwrap();
+        for event in events.iter() {
+            match event.token() {
+                Token(0) => {
+                    println!("EVENT: {:?}", event);
+                    if event.kind() == Ready::writable() {
+                        use std::io::Write;
+                        if !written {
+                            println!("WRITABLE");
+                            sock.write(pkt.packet()).unwrap();
+                            written = true;
+                        }
+                    }
+                    if event.kind() & Ready::readable() == Ready::readable() {
+                        use std::io::Read;
+                        println!("Reading");
+                        'read: loop {
+                            match sock.read(&mut buf[pos..]) {
+                                Ok(n) => {
+                                    if n == 0 {
+                                        break 'read;
+                                    }
+                                    pos += n;
+                                    println!("read {}", n);
+                                    if pos >= buf.len() - 1 {
+                                        println!("Growing buf: len: {} pos: {}", buf.len(), pos);
+                                        for _ in 0..buf.len() {
+                                            buf.push(0);
+                                        }
+                                        println!("Growing buf: new len: {} pos: {}", buf.len(), pos);
+                                    }
+                                },
+                                Err(e) => {
+                                     println!("err: {:?}", e);
+                                     break 'read;
+                                },
+                            }
+                        }
+                        if let Some(pkt) = NetlinkPacket::new(&buf) {
+                            println!("PKT: {:?}", pkt);
+                            let mut cursor = 0;
+                            let total_len = buf.len();
+
+                            let mut aligned_len = ::util::align(pkt.get_length() as usize);
+                            loop {
+                                cursor += aligned_len;
+                                if cursor >= total_len {
+                                    break;
+                                }
+                                println!("NEXT PKT @ {:?}", cursor);
+                                if let Some(next_pkt) = NetlinkPacket::new(&buf[cursor..]) {
+                                    println!("PKT: {:?}", next_pkt);
+                                    aligned_len = ::util::align(next_pkt.get_length() as usize);
+                                    if aligned_len == 0 {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                _ => {},
+            }
+        }
+    }
 }
