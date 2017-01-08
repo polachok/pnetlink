@@ -2,7 +2,7 @@ use packet::route::{IfInfoPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
 use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
 use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
-use packet::netlink::{NetlinkBuf,NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
+use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
 use ::socket::{NetlinkSocket,NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
 use pnet::packet::MutablePacket;
@@ -146,7 +146,7 @@ pub enum OperState {
 }
 
 pub struct Link {
-    packet: NetlinkBuf
+    packet: NetlinkPacket<'static>
 }
 
 pub struct LinksIterator<R: Read> {
@@ -159,7 +159,7 @@ impl<R: Read> Iterator for LinksIterator<R> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(pkt) => {
-                let kind = pkt.get_packet().get_kind();
+                let kind = pkt.get_kind();
                 if kind != RTM_NEWLINK {
                     return None;
                 }
@@ -197,7 +197,7 @@ impl Links for NetlinkConnection {
                     .build()
                     .get_packet()
             ).build();
-        try!(self.write(req.get_packet().packet()));
+        try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         Ok(Box::new(LinksIterator { iter: reader.into_iter() }))
     }
@@ -213,7 +213,7 @@ impl Links for NetlinkConnection {
                     .get_packet()
             ).build()
         };
-        try!(self.write(req.get_packet().packet()));
+        try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         let li = LinksIterator { iter: reader.into_iter() };
         Ok(li.last())
@@ -236,7 +236,7 @@ impl Links for NetlinkConnection {
                 }).build().get_packet()
             }).build()
         };
-        try!(self.write(req.get_packet().packet()));
+        try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         let li = LinksIterator { iter: reader.into_iter() };
         Ok(li.last())
@@ -274,7 +274,7 @@ impl Links for NetlinkConnection {
         };
         let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
             .append(ifi.get_packet()).build();
-        try!(self.write(req.get_packet().packet()));
+        try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         reader.read_to_end()
     }
@@ -291,7 +291,7 @@ impl Links for NetlinkConnection {
                 ifinfo
             }).build()
         };
-        try!(self.write(req.get_packet().packet()));
+        try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         reader.read_to_end()
     }
@@ -360,8 +360,8 @@ impl Link {
 
     // helper methods
     fn with_packet<T,F>(&self, cb: F) -> T
-        where F: Fn(NetlinkPacket) -> T {
-        cb(self.packet.get_packet())
+        where F: Fn(&NetlinkPacket) -> T {
+        cb(&self.packet)
     }
 
     fn with_ifinfo<T,F>(&self, cb: F) -> T

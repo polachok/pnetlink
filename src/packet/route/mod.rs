@@ -1,7 +1,7 @@
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket};
 use packet::netlink::{NLM_F_REQUEST, NLM_F_DUMP};
 use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
-use packet::netlink::{NetlinkBuf,NetlinkBufIterator};
+use packet::netlink::{NetlinkBufIterator};
 use ::socket::{NetlinkSocket,NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
 use pnet::packet::MutablePacket;

@@ -3,7 +3,7 @@ use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
 use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
 use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
-use packet::netlink::{NetlinkBuf,NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
+use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
 use socket::{NetlinkSocket,NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
 use pnet::packet::MutablePacket;
@@ -39,9 +39,9 @@ pub const FRA_TABLE: u16 = 15;      /* Extended table id */
 pub const FRA_FWMASK: u16 = 16;     /* mask for netfilter mark */
 pub const FRA_OIFNAME: u16 = 17;
 
-#[derive(Clone,Debug)]
+#[derive(Debug)]
 pub struct Route {
-    packet: NetlinkBuf,
+    packet: NetlinkPacket<'static>,
 }
 
 impl Route {
@@ -53,7 +53,7 @@ impl Route {
                 ifinfo.set_family(0 /* AF_UNSPEC */);
                 ifinfo
             }).build();
-        let mut reply = conn.send(req.get_packet());
+        let mut reply = conn.send(req);
         RulesIterator { iter: reply.into_iter() }
     }
 
@@ -99,7 +99,7 @@ impl<R: Read> Iterator for RulesIterator<R> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(pkt) => {
-                let kind = pkt.get_packet().get_kind();
+                let kind = pkt.get_kind();
                 if kind != RTM_NEWRULE {
                     return None;
                 }

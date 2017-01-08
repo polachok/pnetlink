@@ -11,7 +11,7 @@ use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket, NetlinkPacket, NetlinkErrorPacket};
 use packet::netlink::{NLM_F_ACK, NLM_F_REQUEST, NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
 use packet::netlink::{NLMSG_NOOP, NLMSG_ERROR, NLMSG_DONE, NLMSG_OVERRUN};
-use packet::netlink::{NetlinkBuf, NetlinkBufIterator, NetlinkReader, NetlinkRequestBuilder};
+use packet::netlink::{NetlinkBufIterator, NetlinkReader, NetlinkRequestBuilder};
 use ::socket::{NetlinkSocket, NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
 use packet::route::addr::IpAddr;
@@ -135,7 +135,7 @@ pub enum OperState {
 }
 
 pub struct Neighbour {
-    packet: NetlinkBuf,
+    packet: NetlinkPacket<'static>,
 }
 
 pub struct NeighboursIterator<R: Read> {
@@ -148,7 +148,7 @@ impl<R: Read> Iterator for NeighboursIterator<R> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(pkt) => {
-                let kind = pkt.get_packet().get_kind();
+                let kind = pkt.get_kind();
                 if kind != RTM_NEWNEIGH {
                     return None;
                 }
@@ -239,7 +239,7 @@ impl Neighbours for NetlinkConnection {
                 .build()
                 .get_packet())
             .build();
-        try!(self.write(req.get_packet().packet()));
+        try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         Ok(Box::new(NeighboursIterator { iter: reader.into_iter() }))
     }
@@ -358,9 +358,9 @@ impl Neighbour {
 
     // helper methods
     fn with_packet<T, F>(&self, mut cb: F) -> T
-        where F: FnMut(NetlinkPacket) -> T
+        where F: FnMut(&NetlinkPacket) -> T
     {
-        cb(self.packet.get_packet())
+        cb(&self.packet)
     }
 
     fn with_neighbour<T, F>(&self, mut cb: F) -> T
