@@ -4,7 +4,7 @@ extern crate mio;
 use libc::{c_int,c_void};
 use libc::{socket,bind,send,recvfrom,setsockopt,getsockopt};
 use std::os::unix::io::{AsRawFd,RawFd};
-use std::io::{self,Error,Result,Read};
+use std::io::{self,Error,Result,Read,Write};
 
 use self::mio::unix::EventedFd;
 use self::mio::{Evented, Poll, Token, Ready, PollOpt};
@@ -197,6 +197,16 @@ impl Read for NetlinkSocket {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
 		self.recv(buf)
 	}
+}
+
+impl Write for NetlinkSocket {
+    fn write(&mut self, buf: &[u8]) -> ::std::io::Result<usize> {
+        self.send(buf)
+    }
+
+    fn flush(&mut self) -> ::std::io::Result<()> {
+        Ok(())
+    }
 }
 
 impl Evented for NetlinkSocket {
