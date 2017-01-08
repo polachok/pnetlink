@@ -442,7 +442,7 @@ impl Link {
         LinksIterator { iter: r }
     }
 
-    fn dump_link(msg: NetlinkPacket) {
+    pub fn dump_link(msg: NetlinkPacket) {
         use std::ffi::CStr;
         if msg.get_kind() != RTM_NEWLINK {
             return;
