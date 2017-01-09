@@ -219,7 +219,7 @@ impl Addresses for NetlinkConnection {
             RtAttrPacket::new(&mut rta_buf1).unwrap()
         }).build();
         let req = NetlinkRequestBuilder::new(RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
-            .append(req.get_packet()).build();
+            .append(req).build();
         self.write(req.packet());
         let reader = NetlinkReader::new(self);
         reader.read_to_end()
@@ -401,16 +401,6 @@ impl Addr {
     }
 }
 
-struct IfAddrPacketBuf {
-    data: Vec<u8>,
-}
-
-impl IfAddrPacketBuf {
-    pub fn get_packet(&self) -> IfAddrPacket {
-        IfAddrPacket::new(&self.data[..]).unwrap()
-    }
-}
-
 struct IfAddrRequestBuilder {
     data: Vec<u8>,
 }
@@ -441,8 +431,8 @@ impl IfAddrRequestBuilder {
         self
     }
 
-    pub fn build(self) -> IfAddrPacketBuf {
-        IfAddrPacketBuf { data: self.data }
+    pub fn build(self) -> IfAddrPacket<'static> {
+        IfAddrPacket::owned(self.data).unwrap()
     }
 }
 
