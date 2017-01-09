@@ -109,27 +109,6 @@ fn read_ip_link_sock() {
     }
 }
 
-#[derive(Debug,Clone)]
-pub struct NetlinkBuf {
-    data: Vec<u8>,
-}
-
-impl NetlinkBuf {
-    fn new(data: &[u8]) -> Self {
-        NetlinkBuf { data: data.to_owned() }
-    }
-
-    pub fn get_packet(&self) -> NetlinkPacket {
-        NetlinkPacket::new(&self.data[..]).unwrap()
-    }
-}
-
-impl From<Vec<u8>> for NetlinkBuf {
-    fn from(v: Vec<u8>) -> Self {
-        NetlinkBuf { data: v }
-    }
-}
-
 pub struct NetlinkReader<R: Read> {
     reader: R,
     buf: Vec<u8>,
@@ -157,9 +136,8 @@ impl<R: Read> NetlinkReader<R> {
     /// Read to end ignoring everything but errors
     pub fn read_to_end(self) -> io::Result<()> {
         for pkt in self.into_iter() {
-            let packet = pkt.get_packet();
-            if packet.get_kind() == NLMSG_ERROR {
-                let err = NetlinkErrorPacket::new(packet.payload()).unwrap();
+            if pkt.get_kind() == NLMSG_ERROR {
+                let err = NetlinkErrorPacket::new(pkt.payload()).unwrap();
                 if err.get_error() != 0 {
                     return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
                 } else {
@@ -172,7 +150,7 @@ impl<R: Read> NetlinkReader<R> {
 }
 
 impl<R: Read> ::std::iter::IntoIterator for NetlinkReader<R> {
-    type Item = NetlinkBuf;
+    type Item = NetlinkPacket<'static>;
     type IntoIter = NetlinkBufIterator<R>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -181,7 +159,7 @@ impl<R: Read> ::std::iter::IntoIterator for NetlinkReader<R> {
 }
 
 impl<R: Read> NetlinkReader<R> {
-    pub fn read_netlink(&mut self) -> io::Result<Option<NetlinkBuf>> {
+    pub fn read_netlink(&mut self) -> io::Result<Option<NetlinkPacket<'static>>> {
         loop {
             match self.state {
                 NetlinkReaderState::NeedMore => {
@@ -227,7 +205,7 @@ impl<R: Read> NetlinkReader<R> {
                             self.state = NetlinkReaderState::Parsing;
                         },
                     }
-                    let slot = NetlinkBuf::new(&self.buf[self.read_at..self.read_at + pkt.get_length() as usize]);
+                    let slot = NetlinkPacket::owned(self.buf[self.read_at..self.read_at + pkt.get_length() as usize].to_owned()).unwrap();
                     self.read_at += len;
                     return Ok(Some(slot));
                 } else {
@@ -244,7 +222,7 @@ pub struct NetlinkBufIterator<R: Read> {
 }
 
 impl<R: Read> Iterator for NetlinkBufIterator<R> {
-    type Item = NetlinkBuf;
+    type Item = NetlinkPacket<'static>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.reader.read_netlink() {
@@ -324,7 +302,7 @@ impl NetlinkRequestBuilder {
         self
     }
 
-    pub fn build(self) -> NetlinkBuf {
-        NetlinkBuf::from(self.data)
+    pub fn build(self) -> NetlinkPacket<'static> {
+        NetlinkPacket::owned(self.data).unwrap()
     }
 }

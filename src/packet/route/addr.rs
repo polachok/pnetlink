@@ -3,7 +3,7 @@ use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
 use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
 use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
-use packet::netlink::{NetlinkBuf,NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
+use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
 use socket::{NetlinkSocket,NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
 use pnet::packet::MutablePacket;
@@ -94,7 +94,7 @@ impl<R: Read> Iterator for AddrsIterator<R> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(pkt) => {
-                let kind = pkt.get_packet().get_kind();
+                let kind = pkt.get_kind();
                 if kind != RTM_NEWADDR {
                     return None;
                 }
@@ -163,7 +163,7 @@ impl Addresses for NetlinkConnection {
                 ifinfo.set_family(family.unwrap_or(0));
                 ifinfo
             }).build();
-        try!(self.write(req.get_packet().packet()));
+        try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         let iter = AddrsIterator { iter: reader.into_iter() };
         Ok(Box::new(iter))
@@ -178,7 +178,7 @@ impl Addresses for NetlinkConnection {
                 ifinfo.set_family(family.unwrap_or(0));
                 ifinfo
             }).build();
-        try!(self.write(req.get_packet().packet()));
+        try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         let iter = AddrsIterator { iter: reader.into_iter() };
         Ok(Box::new(iter.filter(move |addr| addr.with_ifaddr(|ifa| ifa.get_index() == idx))))
@@ -220,15 +220,15 @@ impl Addresses for NetlinkConnection {
         }).build();
         let req = NetlinkRequestBuilder::new(RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
             .append(req.get_packet()).build();
-        self.write(req.get_packet().packet());
+        self.write(req.packet());
         let reader = NetlinkReader::new(self);
         reader.read_to_end()
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Debug)]
 pub struct Addr {
-    packet: NetlinkBuf,
+    packet: NetlinkPacket<'static>,
 }
 
 impl Addr {
@@ -293,8 +293,8 @@ impl Addr {
 
     // helper methods
     fn with_packet<T,F>(&self, cb: F) -> T
-        where F: Fn(NetlinkPacket) -> T {
-        cb(self.packet.get_packet())
+        where F: Fn(&NetlinkPacket) -> T {
+        cb(&self.packet)
     }
 
     fn with_ifaddr<T,F>(&self, cb: F) -> T
@@ -396,7 +396,7 @@ impl Addr {
             ifinfo.set_family(0 /* AF_UNSPEC */);
             ifinfo
         }).build();
-        let mut reply = conn.send(req.get_packet());
+        let mut reply = conn.send(req);
         AddrsIterator { iter: reply.into_iter() }
     }
 }
