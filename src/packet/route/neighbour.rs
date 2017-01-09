@@ -236,8 +236,7 @@ impl Neighbours for NetlinkConnection {
                     }
                     _ => NeighbourDiscoveryPacketBuilder::new(),
                 }
-                .build()
-                .get_packet())
+                .build())
             .build();
         try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
@@ -415,16 +414,6 @@ impl Neighbour {
     }
 }
 
-struct NeighbourDiscoveryPacketBuf {
-    data: Vec<u8>,
-}
-
-impl NeighbourDiscoveryPacketBuf {
-    pub fn get_packet(&self) -> NeighbourDiscoveryPacket {
-        NeighbourDiscoveryPacket::new(&self.data[..]).unwrap()
-    }
-}
-
 struct NeighbourDiscoveryPacketBuilder {
     data: Vec<u8>,
 }
@@ -476,8 +465,8 @@ impl NeighbourDiscoveryPacketBuilder {
         self
     }
 
-    pub fn build(self) -> NeighbourDiscoveryPacketBuf {
-        NeighbourDiscoveryPacketBuf { data: self.data }
+    pub fn build(self) -> NeighbourDiscoveryPacket<'static> {
+        NeighbourDiscoveryPacket::owned(self.data).unwrap()
     }
 }
 

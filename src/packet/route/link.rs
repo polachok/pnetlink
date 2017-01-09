@@ -195,7 +195,6 @@ impl Links for NetlinkConnection {
             .append(
                 IfInfoPacketBuilder::new()
                     .build()
-                    .get_packet()
             ).build();
         try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
@@ -210,7 +209,6 @@ impl Links for NetlinkConnection {
                 IfInfoPacketBuilder::new()
                     .set_index(index)
                     .build()
-                    .get_packet()
             ).build()
         };
         try!(self.write(req.packet()));
@@ -233,7 +231,7 @@ impl Links for NetlinkConnection {
                         payload[0..name_len].copy_from_slice(name.as_bytes());
                     }
                     RtAttrPacket::new(&buf[..]).unwrap()
-                }).build().get_packet()
+                }).build()
             }).build()
         };
         try!(self.write(req.packet()));
@@ -273,7 +271,7 @@ impl Links for NetlinkConnection {
             }).build()
         };
         let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
-            .append(ifi.get_packet()).build();
+            .append(ifi).build();
         try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
         reader.read_to_end()
@@ -434,16 +432,6 @@ impl Link {
     }
 }
 
-struct IfInfoPacketBuf {
-    data: Vec<u8>,
-}
-
-impl IfInfoPacketBuf {
-    pub fn get_packet(&self) -> IfInfoPacket {
-        IfInfoPacket::new(&self.data[..]).unwrap()
-    }
-}
-
 struct IfInfoPacketBuilder {
     data: Vec<u8>,
 }
@@ -498,8 +486,8 @@ impl IfInfoPacketBuilder {
         self
     }
 
-    pub fn build(self) -> IfInfoPacketBuf {
-        IfInfoPacketBuf { data: self.data }
+    pub fn build(self) -> IfInfoPacket<'static> {
+        IfInfoPacket::owned(self.data).unwrap()
     }
 }
 
