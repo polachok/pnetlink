@@ -5,17 +5,14 @@ authors = ["root"]
 build = "build.rs"
 
 [build-dependencies.pnet_macros]
-git = "https://github.com/polachok/libpnet"
-branch = "le"
+version = "0.13"
 features = [ "with-syntex" ]
 
 [dependencies.pnet_macros_support]
-git = "https://github.com/polachok/libpnet"
-branch = "le"
+version = "0.1.1"
 
 [dependencies.pnet]
-git = "https://github.com/polachok/libpnet"
-branch = "le"
+version = "0.16"
 features = [ "with-syntex" ]
 
 [build-dependencies.syntex]
