@@ -1,7 +1,7 @@
 [package]
 name = "pnetlink"
-version = "0.1.0"
-authors = ["root"]
+version = "0.0.1"
+authors = ["Alexander Polakov <plhk@sdf.org>"]
 build = "build.rs"
 
 [build-dependencies.pnet_macros]
