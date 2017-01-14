@@ -3,6 +3,12 @@ name = "pnetlink"
 version = "0.0.1"
 authors = ["Alexander Polakov <plhk@sdf.org>"]
 build = "build.rs"
+description = "Netlink library in pure rust"
+repository = "https://github.com/polachok/pnetlink"
+readme = "README.md"
+keywords = ["netlink", "pnet", "linux", "network"]
+license = "MIT"
+documentation = "https://docs.rs/pnetlink/0.0.1/pnetlink/"
 
 [build-dependencies.pnet_macros]
 version = "0.13"
