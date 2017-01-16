@@ -1,3 +1,4 @@
+//! Route operations
 use packet::route::{RouteCacheInfoPacket,RtMsgPacket,MutableRtMsgPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
@@ -84,6 +85,7 @@ pub struct Route {
 }
 
 impl Route {
+    /// Iterate over routes
     pub fn iter_routes(conn: &mut NetlinkConnection) -> RoutesIterator<&mut NetlinkConnection> {
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
         let req = NetlinkRequestBuilder::new(RTM_GETROUTE, NLM_F_DUMP)

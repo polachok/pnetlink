@@ -1,3 +1,4 @@
+//! Neighbor (ARP, etc.) operations
 use libc;
 use std::io::{self, Read, Write};
 use std::mem;
@@ -26,7 +27,6 @@ pub const RTM_DELNEIGH: u16 = 29;
 pub const RTM_GETNEIGH: u16 = 30;
 
 // See linux/neighbour.h for the source for the cosntants and structs herein
-
 
 #[derive(Debug,Copy,Clone)]
 #[repr(u16)]

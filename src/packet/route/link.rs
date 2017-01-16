@@ -1,3 +1,21 @@
+//! Link layer operations
+//!
+//! # Example
+//! ```
+//! extern crate pnetlink;
+//!
+//! use pnetlink::packet::netlink::NetlinkConnection;
+//! use pnetlink::packet::route::link::{Links,Link};
+//! use pnetlink::packet::route::addr::{Addresses,Addr};
+//!
+//! let mut conn = NetlinkConnection::new();
+//! let links = conn.iter_links().unwrap().collect::<Vec<_>>();
+//! for link in links {
+//!    ...
+//! }
+//! ```
+
+
 use packet::route::{IfInfoPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
 use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
@@ -68,6 +86,8 @@ pub const IFLA_INFO_KIND: u16 = 1;
 pub const IFLA_INFO_DATA: u16 = 2;
 pub const IFLA_INFO_XSTATS: u16 = 3;
 
+/// Interface type
+/// NB: Only Generic, Ether and Loopback are currently defined
 #[derive(Debug,Copy,Clone)]
 #[repr(u16)]
 pub enum IfType {
@@ -97,33 +117,47 @@ pub enum LinkType {
     Bridge
 }
 
-/* link flags */
+/// Interface (link) flags
 bitflags! {
     pub flags IfFlags: u32 {
-        const UP      =    0x1,             /* interface is up              */
-        const BROADCAST =  0x2,             /* broadcast address valid      */
-        const DEBUG    =   0x4,             /* turn on debugging            */
-        const LOOPBACK  =  0x8,             /* is a loopback net            */
-        const POINTOPOINT = 0x10,            /* interface is has p-p link    */
-        const NOTRAILERS = 0x20,            /* avoid use of trailers        */
-        const RUNNING   =  0x40,            /* interface RFC2863 OPER_UP    */
-        const NOARP     =  0x80,            /* no ARP protocol              */
-        const PROMISC   =  0x100,           /* receive all packets          */
-        const ALLMULTI  =  0x200,           /* receive all multicast packets*/
-
-        const MASTER    =  0x400,           /* master of a load balancer    */
-        const SLAVE     =  0x800,           /* slave of a load balancer     */
-
-        const MULTICAST =  0x1000,          /* Supports multicast           */
-
-        const PORTSEL   =  0x2000,          /* can set media type           */
-        const AUTOMEDIA =  0x4000,          /* auto media select active     */
-        const DYNAMIC   =  0x8000,          /* dialup device with changing addresses*/
-
-        const LOWER_UP  =  0x10000,         /* driver signals L1 up         */
-        const DORMANT   =  0x20000,         /* driver signals dormant       */
-
-        const ECHO      =  0x40000,         /* echo sent packets            */
+        /// interface is up
+        const UP      =    0x1,
+        /// broadcast address valid
+        const BROADCAST =  0x2,
+        /// turn on debugging
+        const DEBUG    =   0x4,
+        /// is a loopback net
+        const LOOPBACK  =  0x8,
+        /// interface is a p-p link
+        const POINTOPOINT = 0x10,
+        /// avoid use of trailers
+        const NOTRAILERS = 0x20,
+        /// interface RFC2863 OPER_UP
+        const RUNNING   =  0x40,
+        /// no ARP protocol
+        const NOARP     =  0x80,
+        /// receive all packets
+        const PROMISC   =  0x100,
+        /// receive all multicast packets
+        const ALLMULTI  =  0x200,
+        /// master of a load balancer
+        const MASTER    =  0x400,
+        /// slave of a load balancer
+        const SLAVE     =  0x800,           
+        /// Supports multicast
+        const MULTICAST =  0x1000,
+        /// can set media type
+        const PORTSEL   =  0x2000,
+        /// auto media select active
+        const AUTOMEDIA =  0x4000,
+        /// dialup device with changing addresses
+        const DYNAMIC   =  0x8000,
+        /// driver signals L1 up
+        const LOWER_UP  =  0x10000,
+        /// driver signals dormant
+        const DORMANT   =  0x20000,
+        /// echo sent packets
+        const ECHO      =  0x40000,
     }
 }
 
@@ -133,6 +167,7 @@ impl IfFlags {
     }
 }
 
+/// Operating state
 #[derive(Debug)]
 #[repr(u8)]
 pub enum OperState {
@@ -145,6 +180,7 @@ pub enum OperState {
     Up = 6,
 }
 
+/// Link is a virtual of physical interface
 pub struct Link {
     packet: NetlinkPacket<'static>
 }
@@ -176,6 +212,7 @@ impl ::std::fmt::Debug for Link {
     }
 }
 
+/// Links operation trait
 pub trait Links where Self: Read + Write {
     /// iterate over links
     fn iter_links(&mut self) -> io::Result<Box<LinksIterator<&mut Self>>>;
@@ -301,14 +338,17 @@ impl Link {
         self.with_ifinfo(|ifi| ifi.get_index())
     }
 
+    /// Get link's type
     pub fn get_type(&self) -> IfType {
         self.with_ifinfo(|ifi| ifi.get_type_())
     }
 
+    /// Get link's flags
     pub fn get_flags(&self) -> IfFlags {
         self.with_ifinfo(|ifi| ifi.get_flags())
     }
 
+    /// Get hardware address
     pub fn get_hw_addr(&self) -> Option<MacAddr> {
         self.with_rta(IFLA_ADDRESS, |rta| {
             let payload = rta.payload();
@@ -316,6 +356,7 @@ impl Link {
         })
     }
 
+    /// Get MTU
     pub fn get_mtu(&self) -> Option<u32> {
         self.with_rta(IFLA_MTU, |rta| {
             let mtu = RtAttrMtuPacket::new(rta.packet()).unwrap();
@@ -332,6 +373,7 @@ impl Link {
         })
     }
 
+    /// Get operating state
     pub fn get_state(&self) -> OperState {
         use std::mem;
         self.with_rta_iter(|mut rti| {
@@ -340,6 +382,7 @@ impl Link {
         })
     }
 
+    /// Get broadcast address
     pub fn get_broadcast(&self) -> Option<MacAddr> {
         self.with_rta(IFLA_BROADCAST, |rta| {
             let payload = rta.payload();
@@ -347,6 +390,7 @@ impl Link {
         })
     }
 
+    /// Get name
     pub fn get_name(&self) -> Option<String> {
         use std::ffi::CStr;
         self.with_rta(IFLA_IFNAME, |rta| {
