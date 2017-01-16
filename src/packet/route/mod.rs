@@ -1,4 +1,5 @@
-//! RTNETLINK aka Netlink Route Family is used for network device configuration
+//! RTNETLINK aka Netlink Route Family is used for network device configuration.
+//!
 //! Different layer operations are implemented as traits 
 //! on NetlinkConnection
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket};
@@ -22,8 +23,6 @@ pub mod rule;
 include!(concat!(env!("OUT_DIR"), "/route/route.rs"));
 
 const RTA_ALIGNTO: usize = 4;
-
-pub const RTM_NEWADDR: u16 = 20;
 
 fn align(len: usize) -> usize {
     ((len)+RTA_ALIGNTO-1) & !(RTA_ALIGNTO-1)
