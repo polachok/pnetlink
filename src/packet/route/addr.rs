@@ -1,3 +1,4 @@
+//! Address operations
 use packet::route::{IfAddrCacheInfoPacket,MutableIfInfoPacket,IfAddrPacket,MutableIfAddrPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
@@ -148,6 +149,7 @@ impl ::std::fmt::Debug for IpAddr {
     }
 }
 
+/// Address operations trait
 pub trait Addresses where Self: Read + Write {
     fn iter_addrs<'a>(&'a mut self, family: Option<u8>) -> io::Result<Box<Iterator<Item = Addr> + 'a>>;
     fn get_link_addrs<'a,'b>(&'a mut self, family: Option<u8>, link: &'b Link) -> io::Result<Box<Iterator<Item = Addr> + 'a>>;
@@ -155,6 +157,7 @@ pub trait Addresses where Self: Read + Write {
 }
 
 impl Addresses for NetlinkConnection {
+    /// Iterate over all addresses
     fn iter_addrs<'a>(&'a mut self, family: Option<u8>) -> io::Result<Box<Iterator<Item = Addr> + 'a>> {
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
         let req = NetlinkRequestBuilder::new(RTM_GETADDR, NLM_F_DUMP)
@@ -169,6 +172,7 @@ impl Addresses for NetlinkConnection {
         Ok(Box::new(iter))
     }
 
+    /// Iterate over `family` addresses for `link`
     fn get_link_addrs<'a,'b>(&'a mut self, family: Option<u8>, link: &'b Link) -> io::Result<Box<Iterator<Item = Addr> + 'a>> {
         let idx = link.get_index();
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
@@ -184,6 +188,7 @@ impl Addresses for NetlinkConnection {
         Ok(Box::new(iter.filter(move |addr| addr.with_ifaddr(|ifa| ifa.get_index() == idx))))
     }
 
+    /// Add address `addr` to `link` with scope `scope`
     fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, scope: Scope) -> io::Result<()> {
         let link_index = link.get_index();
         let family = match addr {
@@ -226,28 +231,34 @@ impl Addresses for NetlinkConnection {
     }
 }
 
+/// Address
 #[derive(Debug)]
 pub struct Addr {
     packet: NetlinkPacket<'static>,
 }
 
 impl Addr {
+    /// get address family
     pub fn get_family(&self) -> u8 {
         self.with_ifaddr(|ifa| ifa.get_family())
     }
 
+    /// get address flags
     pub fn get_flags(&self) -> IfAddrFlags {
         self.with_ifaddr(|ifa| ifa.get_flags())
     }
 
+    /// get prefix length
     pub fn get_prefix_len(&self) -> u8 {
         self.with_ifaddr(|ifa| ifa.get_prefix_len())
     }
 
+    /// get scope
     pub fn get_scope(&self) -> Scope {
         self.with_ifaddr(|ifa| ifa.get_scope())
     }
 
+    /// get link index for address
     pub fn get_link_index(&self) -> u32 {
         self.with_ifaddr(|ifa| ifa.get_index())
     }
@@ -274,6 +285,7 @@ impl Addr {
         })
     }
 
+    /// Get broadcast address
     pub fn get_broadcast_ip(&self) -> Option<IpAddr> {
         let family = self.with_ifaddr(|ifa| ifa.get_family());
         self.with_rta(IFA_BROADCAST, |rta| {

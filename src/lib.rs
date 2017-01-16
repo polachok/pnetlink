@@ -1,3 +1,5 @@
+//! Netlink is a linux kernel interface used for communication between
+//! kernel and userspace.
 #[macro_use]
 extern crate bitflags; 
 extern crate pnet;

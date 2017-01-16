@@ -1,3 +1,4 @@
+//! Rules operations
 use packet::route::{FibRulePacket,MutableRtMsgPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
@@ -40,11 +41,12 @@ pub const FRA_FWMASK: u16 = 16;     /* mask for netfilter mark */
 pub const FRA_OIFNAME: u16 = 17;
 
 #[derive(Debug)]
-pub struct Route {
+pub struct Rule {
     packet: NetlinkPacket<'static>,
 }
 
-impl Route {
+impl Rule {
+    /// iterate over rules
     pub fn iter_rules(conn: &mut NetlinkConnection) -> RulesIterator<&mut NetlinkConnection> {
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
         let req = NetlinkRequestBuilder::new(RTM_GETRULE, NLM_F_DUMP)
@@ -94,7 +96,7 @@ pub struct RulesIterator<R: Read> {
 }
 
 impl<R: Read> Iterator for RulesIterator<R> {
-    type Item = Route;
+    type Item = Rule;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
@@ -103,7 +105,7 @@ impl<R: Read> Iterator for RulesIterator<R> {
                 if kind != RTM_NEWRULE {
                     return None;
                 }
-                return Some(Route { packet: pkt });
+                return Some(Rule { packet: pkt });
             },
             None => None,
         }

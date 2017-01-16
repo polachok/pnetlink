@@ -1,3 +1,7 @@
+/// RTNETLINK aka Netlink Route Family is used for network
+/// device configuration
+/// Different layer operations are implemented as traits 
+/// on NetlinkConnection
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket};
 use packet::netlink::{NLM_F_REQUEST, NLM_F_DUMP};
 use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
@@ -26,6 +30,7 @@ fn align(len: usize) -> usize {
     ((len)+RTA_ALIGNTO-1) & !(RTA_ALIGNTO-1)
 }
 
+/// RTNETLINK attribute iterator
 pub struct RtAttrIterator<'a> {
     buf: &'a [u8],
 }
