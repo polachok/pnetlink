@@ -1,3 +1,4 @@
+//! Netlink packet handling
 use ::socket::{NetlinkSocket,NetlinkProtocol};
 use libc;
 use std::mem;
@@ -109,6 +110,7 @@ fn read_ip_link_sock() {
     }
 }
 
+/// Netlink packet parser
 pub struct NetlinkReader<R: Read> {
     reader: R,
     buf: Vec<u8>,
@@ -232,6 +234,7 @@ impl<R: Read> Iterator for NetlinkBufIterator<R> {
     }
 }
 
+/// NetlinkConnection represents active netlink connection
 pub struct NetlinkConnection {
     sock: NetlinkSocket,
 }
@@ -265,12 +268,15 @@ impl ::std::io::Write for NetlinkConnection {
     }
 }
 
-
+/// NetlinkRequestBuilder provides functions
+/// for building Netlink requests
 pub struct NetlinkRequestBuilder {
     data: Vec<u8>,
 }
 
 impl NetlinkRequestBuilder {
+    /// Creates an empty request with flags `flags`
+    /// `NLM_F_REQUEST` is set automatically
     pub fn new(kind: u16, flags: NetlinkMsgFlags) -> Self {
         let len = MutableNetlinkPacket::minimum_packet_size();
         let mut data = vec![0; len];
@@ -285,6 +291,8 @@ impl NetlinkRequestBuilder {
         }
     }
 
+    /// Appends `data` to Netlink header. Alignment is handled 
+    /// automatically.
     pub fn append<P: PacketSize + Packet>(mut self, data: P) -> Self {
         let data = data.packet();
         let len = data.len();
@@ -302,6 +310,7 @@ impl NetlinkRequestBuilder {
         self
     }
 
+    /// Returns final packet
     pub fn build(self) -> NetlinkPacket<'static> {
         NetlinkPacket::owned(self.data).unwrap()
     }
