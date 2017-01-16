@@ -232,6 +232,7 @@ impl<R: Read> Iterator for NetlinkBufIterator<R> {
     }
 }
 
+/// NetlinkConnection represents active netlink connection
 pub struct NetlinkConnection {
     sock: NetlinkSocket,
 }

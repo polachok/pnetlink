@@ -1,3 +1,4 @@
+//! Netlink socket related functions
 extern crate libc;
 
 use libc::{c_int,c_void};
