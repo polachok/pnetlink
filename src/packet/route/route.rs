@@ -1,11 +1,12 @@
 //! Route operations
-use packet::route::{RouteCacheInfoPacket,RtMsgPacket,MutableRtMsgPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket};
+use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableRtMsgPacket, MutableIfInfoPacket,
+                    RtAttrIterator, RtAttrPacket, MutableRtAttrPacket};
 use packet::route::link::Link;
-use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
-use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
-use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
-use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
-use socket::{NetlinkSocket,NetlinkProtocol};
+use packet::netlink::{MutableNetlinkPacket, NetlinkPacket, NetlinkErrorPacket};
+use packet::netlink::{NLM_F_ACK, NLM_F_REQUEST, NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
+use packet::netlink::{NLMSG_NOOP, NLMSG_ERROR, NLMSG_DONE, NLMSG_OVERRUN};
+use packet::netlink::{NetlinkBufIterator, NetlinkReader, NetlinkRequestBuilder};
+use socket::{NetlinkSocket, NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
 use pnet::packet::MutablePacket;
 use pnet::packet::Packet;
@@ -14,16 +15,16 @@ use pnet::util::MacAddr;
 use libc;
 
 use std::net::Ipv4Addr;
-use std::io::{Read,Cursor,self};
+use std::io::{self, Read, Cursor};
 use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
 
 pub const RTM_NEWROUTE: u16 = 24;
 pub const RTM_DELROUTE: u16 = 25;
 pub const RTM_GETROUTE: u16 = 26;
 
-/* Reserved table identifiers */
+// Reserved table identifiers
 pub const RT_TABLE_UNSPEC: u32 = 0;
-/* User defined values */
+// User defined values
 pub const RT_TABLE_COMPAT: u32 = 252;
 pub const RT_TABLE_DEFAULT: u32 = 253;
 pub const RT_TABLE_MAIN: u32 = 254;
@@ -31,19 +32,19 @@ pub const RT_TABLE_LOCAL: u32 = 255;
 
 #[repr(u8)]
 enum RtmType {
-    UNICAST,            /* Gateway or direct route      */
-    LOCAL,              /* Accept locally               */
-    BROADCAST,          /* Accept locally as broadcast,
-                                   send as broadcast */
-    ANYCAST,            /* Accept locally as broadcast,
-                                   but send as unicast */
-    MULTICAST,          /* Multicast route              */
-    BLACKHOLE,          /* Drop                         */
-    UNREACHABLE,        /* Destination is unreachable   */
-    PROHIBIT,           /* Administratively prohibited  */
-    THROW,              /* Not in this table            */
-    NAT,                /* Translate this address       */
-    XRESOLVE,           /* Use external resolver        */
+    UNICAST, // Gateway or direct route
+    LOCAL, // Accept locally
+    BROADCAST, /* Accept locally as broadcast,
+                * send as broadcast */
+    ANYCAST, /* Accept locally as broadcast,
+              * but send as unicast */
+    MULTICAST, // Multicast route
+    BLACKHOLE, // Drop
+    UNREACHABLE, // Destination is unreachable
+    PROHIBIT, // Administratively prohibited
+    THROW, // Not in this table
+    NAT, // Translate this address
+    XRESOLVE, // Use external resolver
 }
 
 bitflags! {
@@ -72,7 +73,7 @@ pub const RTA_PREFSRC: u16 = 7;
 pub const RTA_METRICS: u16 = 8;
 pub const RTA_MULTIPATH: u16 = 9;
 pub const RTA_PROTOINFO: u16 = 10; /* no longer used */
-pub const RTA_FLOW: u16 =  11;
+pub const RTA_FLOW: u16 = 11;
 pub const RTA_CACHEINFO: u16 = 12;
 pub const RTA_SESSION: u16 = 13; /* no longer used */
 pub const RTA_MP_ALGO: u16 = 14; /* no longer used */
@@ -93,7 +94,8 @@ impl Route {
                 let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                 ifinfo.set_family(0 /* AF_UNSPEC */);
                 ifinfo
-            }).build();
+            })
+            .build();
         let mut reply = conn.send(req);
         RoutesIterator { iter: reply.into_iter() }
     }
@@ -103,7 +105,7 @@ impl Route {
         if msg.get_kind() != RTM_NEWROUTE {
             return;
         }
-        //println!("NetLink pkt {:?}", msg);
+        // println!("NetLink pkt {:?}", msg);
         if let Some(rtm) = RtMsgPacket::new(&msg.payload()[0..]) {
             println!("├ rtm: {:?}", rtm);
             let payload = &rtm.payload()[0..];
@@ -114,39 +116,37 @@ impl Route {
                         let mut cur = Cursor::new(rta.payload());
                         let table = cur.read_u32::<LittleEndian>().unwrap();
                         println!(" ├ TABLE {:?}", table);
-                    },
+                    }
                     RTA_OIF => {
                         let mut cur = Cursor::new(rta.payload());
                         let idx = cur.read_u32::<LittleEndian>().unwrap();
                         println!(" ├ OUT.IF {:?}", idx);
-                    },
+                    }
                     RTA_PRIORITY => {
                         let mut cur = Cursor::new(rta.payload());
                         let prio = cur.read_u32::<LittleEndian>().unwrap();
                         println!(" ├ PRIO {:?}", prio);
-                    },
+                    }
                     RTA_GATEWAY => {
                         let mut cur = Cursor::new(rta.payload());
                         let ip = Ipv4Addr::from(cur.read_u32::<BigEndian>().unwrap());
                         println!(" ├ GATEWAY {:?}", ip);
-                    },
+                    }
                     RTA_CACHEINFO => {
                         let pkt = RouteCacheInfoPacket::new(rta.payload());
                         println!(" ├ CACHE INFO {:?}", pkt);
-                    },
-                    RTA_SRC => {
-                        println!(" ├ SRC {:?}", rta.payload())
-                    },
+                    }
+                    RTA_SRC => println!(" ├ SRC {:?}", rta.payload()),
                     RTA_PREFSRC => {
                         let mut cur = Cursor::new(rta.payload());
                         let ip = Ipv4Addr::from(cur.read_u32::<BigEndian>().unwrap());
                         println!(" ├ PREFSRC {:?}", ip);
-                    },
+                    }
                     RTA_DST => {
                         let mut cur = Cursor::new(rta.payload());
                         let ip = Ipv4Addr::from(cur.read_u32::<BigEndian>().unwrap());
                         println!(" ├ DST {:?}", ip);
-                    },
+                    }
                     _ => println!(" ├ {:?}", rta),
                 }
             }
@@ -169,7 +169,7 @@ impl<R: Read> Iterator for RoutesIterator<R> {
                     return None;
                 }
                 return Some(Route { packet: pkt });
-            },
+            }
             None => None,
         }
     }
@@ -179,6 +179,6 @@ impl<R: Read> Iterator for RoutesIterator<R> {
 fn dump_routes() {
     let mut conn = NetlinkConnection::new();
     for route in Route::iter_routes(&mut conn) {
-        Route::dump_route(route.packet.get_packet());
+        Route::dump_route(route.packet);
     }
 }

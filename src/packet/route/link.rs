@@ -168,7 +168,7 @@ impl IfFlags {
 }
 
 /// Operating state
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 #[repr(u8)]
 pub enum OperState {
     Unknown = 0,
@@ -543,7 +543,7 @@ mod tests {
         use ::packet::route::link::{Link,Links};
         let mut conn = NetlinkConnection::new();
         for link in conn.iter_links().unwrap() {
-            Link::dump_link(link.packet.get_packet());
+            Link::dump_link(link.packet);
         }
     }
 

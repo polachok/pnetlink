@@ -115,7 +115,7 @@ impl<R: Read> Iterator for RulesIterator<R> {
 #[test]
 fn dump_rules() {
     let mut conn = NetlinkConnection::new();
-    for rule in Route::iter_rules(&mut conn) {
-        Route::dump_rule(rule.packet.get_packet());
+    for rule in Rule::iter_rules(&mut conn) {
+        Rule::dump_rule(rule.packet);
     }
 }
