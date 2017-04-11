@@ -224,6 +224,10 @@ pub trait Links where Self: Read + Write {
     fn delete_link(&mut self, link: Link) -> io::Result<()>;
     /// create dummy link
     fn new_dummy_link(&mut self, name: &str) -> io::Result<()>;
+    /// set link down
+    fn link_set_down(&mut self, index: u32) -> io::Result<()>;
+    /// set link up
+    fn link_set_up(&mut self, index: u32) -> io::Result<()>;
 }
 
 impl Links for NetlinkConnection {
@@ -330,6 +334,45 @@ impl Links for NetlinkConnection {
         let reader = NetlinkReader::new(self);
         reader.read_to_end()
     }
+
+    fn link_set_down(&mut self, index: u32) -> io::Result<()> {
+        let mut req = {
+            let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
+            NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_ACK)
+                .append({
+                    let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
+                    ifinfo.set_family(0 /* AF_UNSPEC */);
+                    ifinfo.set_index(index);
+                    ifinfo.set_change(UP.bits);
+                    ifinfo.set_flags(IfFlags::new(0) & !UP);
+                    ifinfo
+                }).build()
+        };
+
+       try!(self.write(req.packet()));
+       let reader = NetlinkReader::new(self);
+       reader.read_to_end()
+    }
+    
+    fn link_set_up(&mut self, index: u32) -> io::Result<()> {
+        let mut req = {
+            let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
+            NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_ACK)
+                .append({
+                    let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
+                    ifinfo.set_family(0 /* AF_UNSPEC */);
+                    ifinfo.set_index(index);
+                    ifinfo.set_change(UP.bits);
+                    ifinfo.set_flags(UP);
+                    ifinfo
+                }).build()
+        };
+
+       try!(self.write(req.packet()));
+       let reader = NetlinkReader::new(self);
+       reader.read_to_end()
+    }
+
 }
 
 impl Link {
@@ -578,4 +621,29 @@ mod tests {
         conn.iter_links().unwrap().find(|link| link.get_name() == Some("test1488".to_owned())).is_none();
     }
 
+    #[test]
+    // CAP_NET_ADMIN needed
+    fn up_and_down_link() {
+        use ::packet::netlink::NetlinkConnection;
+        use ::packet::route::link::{Links, UP};
+
+        let linkname = "test1489";
+
+        let mut conn = NetlinkConnection::new();
+        conn.new_dummy_link(linkname).unwrap();
+
+        let link = conn.get_link_by_name(linkname).unwrap().unwrap();
+        conn.link_set_up(link.get_index()).unwrap();
+
+        let link = conn.get_link_by_name(linkname).unwrap().unwrap();
+
+        assert!(link.get_flags() & UP == UP ); // Is up
+
+        conn.link_set_down(link.get_index()).unwrap();
+
+        let link = conn.get_link_by_name(linkname).unwrap().unwrap();
+        assert!((link.get_flags() & UP).is_empty() ); // Is down
+
+        conn.delete_link(link);
+    }
 }
