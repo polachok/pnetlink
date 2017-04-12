@@ -319,22 +319,22 @@ impl Neighbour {
     pub fn get_destination(&self) -> Option<IpAddr> {
         let family = self.get_family();
         let rta_lookup = self.with_rta(NeighbourAttributes::DST, |rta| {
-                match rta.get_rta_len() {
-                    // 4 for the rta header, then 4 or 16.
-                    8 | 20 => {
-                        let addr = Addr::ip_from_family_and_bytes(family, rta.payload());
-                        Some(addr)
-                    },
-                    l => {
-                        // Perhaps this should return Result<> ?
-                        println!("unknown address length {:?}", l);
-                        None
-                    }
+            match rta.get_rta_len() {
+                // 4 for the rta header, then 4 or 16.
+                8 | 20 => {
+                    let addr = Addr::ip_from_family_and_bytes(family, rta.payload());
+                    Some(addr)
                 }
-            });
+                l => {
+                    // Perhaps this should return Result<> ?
+                    println!("unknown address length {:?}", l);
+                    None
+                }
+            }
+        });
         match rta_lookup {
             Some(result) => result,
-            None => None
+            None => None,
         }
     }
 
@@ -478,7 +478,7 @@ mod tests {
         use ::packet::route::neighbour::{Neighbour, Neighbours};
         let mut conn = NetlinkConnection::new();
         for neighbour in conn.iter_neighbours(None).unwrap() {
-            Neighbour::dump_neighbour(neighbour.packet.get_packet());
+            Neighbour::dump_neighbour(neighbour.packet);
         }
     }
 
@@ -491,7 +491,7 @@ mod tests {
         let mut conn = NetlinkConnection::new();
         let lo0 = conn.get_link_by_name("lo").unwrap().unwrap();
         for neighbour in conn.iter_neighbours(Some(&lo0)).unwrap() {
-            Neighbour::dump_neighbour(neighbour.packet.get_packet());
+            Neighbour::dump_neighbour(neighbour.packet);
         }
     }
 

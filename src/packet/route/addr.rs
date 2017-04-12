@@ -455,7 +455,7 @@ fn dump_addrs() {
 
     let mut conn = NetlinkConnection::new();
     for addr in conn.iter_addrs(None).unwrap() {
-        Addr::dump_addr(addr.packet.get_packet());
+        Addr::dump_addr(addr.packet);
     }
 }
 

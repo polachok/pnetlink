@@ -86,7 +86,6 @@ fn read_ip_link_dump_2() {
     let mut r = BufReader::new(f);
     let mut reader = NetlinkReader::new(&mut r);
     while let Ok(Some(pkt)) = reader.read_netlink() {
-        let pkt = pkt.get_packet();
         println!("{:?}", pkt);
         if pkt.get_kind() == NLMSG_DONE {
             break;
@@ -105,7 +104,6 @@ fn read_ip_link_sock() {
     let mut r = NetlinkSocket::bind(NetlinkProtocol::Route, 0 as u32).unwrap();
     let mut reader = NetlinkReader::new(&mut r);
     while let Ok(Some(pkt)) = reader.read_netlink() {
-        let pkt = pkt.get_packet();
         println!("{:?}", pkt);
     }
 }
