@@ -7,7 +7,8 @@ use std::fs;
 
 const FILES: &'static [&'static str] = &[
     "netlink.rs",
-    "route/route.rs"
+    "route/route.rs",
+    "audit/audit.rs"
 ];
 
 pub fn expand() {

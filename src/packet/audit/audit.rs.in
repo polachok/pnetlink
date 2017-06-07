@@ -1,0 +1,20 @@
+use pnet_macros_support::types::*;
+use pnet::packet::PrimitiveValues;
+
+#[packet]
+pub struct AuditStatus {
+    mask: u32le,
+    enabled: u32le,
+    failure: u32le,
+    pid: u32le,
+    rate_limit: u32le,
+    backlog_limit: u32le,
+    lost: u32le,
+    backlog: u32le,
+    feature_bitmap: u32le,
+    backlog_wait_time: u32le,
+    #[payload]
+    #[length="0"]
+    _zero: Vec<u8>,
+}
+

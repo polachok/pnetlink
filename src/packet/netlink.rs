@@ -237,6 +237,12 @@ pub struct NetlinkConnection {
     sock: NetlinkSocket,
 }
 
+impl From<NetlinkSocket> for NetlinkConnection {
+    fn from(sock: NetlinkSocket) -> Self {
+        NetlinkConnection { sock: sock }
+    }
+}
+
 impl NetlinkConnection {
     pub fn new() -> Self {
         NetlinkConnection {
