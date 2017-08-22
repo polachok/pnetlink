@@ -519,7 +519,7 @@ impl Link {
     }
 }
 
-struct IfInfoPacketBuilder {
+pub struct IfInfoPacketBuilder {
     data: Vec<u8>,
 }
 

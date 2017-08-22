@@ -34,7 +34,7 @@ pub struct RtAttrIterator<'a> {
 }
 
 impl<'a> RtAttrIterator<'a> {
-    fn new(buf: &'a [u8]) -> Self {
+    pub fn new(buf: &'a [u8]) -> Self {
         RtAttrIterator {
             buf: buf,
         }
