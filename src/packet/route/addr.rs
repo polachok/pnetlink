@@ -33,7 +33,7 @@ pub const RTM_GETADDR: u16 = 22;
 #[derive(Debug,Copy,Clone)]
 #[repr(u8)]
 pub enum Scope {
-    Global=0,
+    Universe=0,
     /* User defined values  */
     Site=200,
     Link=253,
