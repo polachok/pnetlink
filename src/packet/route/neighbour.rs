@@ -2,6 +2,7 @@
 use libc;
 use std::io::{self, Read, Write};
 use std::mem;
+use std::net::IpAddr;
 
 use byteorder::{ByteOrder, NativeEndian};
 
@@ -15,7 +16,6 @@ use packet::netlink::{NLMSG_NOOP, NLMSG_ERROR, NLMSG_DONE, NLMSG_OVERRUN};
 use packet::netlink::{NetlinkBufIterator, NetlinkReader, NetlinkRequestBuilder};
 use ::socket::{NetlinkSocket, NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
-use packet::route::addr::IpAddr;
 use pnet::packet::MutablePacket;
 use pnet::packet::Packet;
 use pnet::packet::PacketSize;

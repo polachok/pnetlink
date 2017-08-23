@@ -14,7 +14,7 @@ use pnet::util::MacAddr;
 use libc;
 use std::io::{Read,Write,Cursor,self};
 use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
-use std::net::{Ipv4Addr,Ipv6Addr};
+use std::net::{Ipv4Addr,Ipv6Addr, IpAddr};
 
 pub const RTM_NEWADDR: u16 = 20;
 pub const RTM_DELADDR: u16 = 21;
@@ -106,14 +106,11 @@ impl<R: Read> Iterator for AddrsIterator<R> {
     }
 }
 
-/// Abstract over IP versions
-#[derive(Eq,PartialEq)]
-pub enum IpAddr {
-    V4(Ipv4Addr),
-    V6(Ipv6Addr),
+trait ToByteVec {
+    fn bytes(&self) -> Vec<u8>;
 }
 
-impl IpAddr {
+impl ToByteVec for IpAddr {
     fn bytes(&self) -> Vec<u8> {
         match self {
             &IpAddr::V4(ip) => {
@@ -122,29 +119,10 @@ impl IpAddr {
                 v
             },
             &IpAddr::V6(ip) => {
-                panic!("not implemented"); /* FIXME */
+                let mut v = Vec::new();
+                v.extend_from_slice(&ip.octets()[..]);
+                v
             }
-        }
-    }
-}
-
-impl From<Ipv6Addr> for IpAddr {
-    fn from(addr: Ipv6Addr) -> Self {
-        IpAddr::V6(addr)
-    }
-}
-
-impl From<Ipv4Addr> for IpAddr {
-    fn from(addr: Ipv4Addr) -> Self {
-        IpAddr::V4(addr)
-    }
-}
-
-impl ::std::fmt::Debug for IpAddr {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        match self {
-            &IpAddr::V4(ip) => ip.fmt(f),
-            &IpAddr::V6(ip) => ip.fmt(f),
         }
     }
 }
