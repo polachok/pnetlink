@@ -12,4 +12,4 @@ extern crate byteorder;
 
 pub mod socket;
 pub mod packet;
-mod util;
+pub mod util;
