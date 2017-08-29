@@ -14,7 +14,7 @@ use pnet::util::MacAddr;
 use libc;
 use std::io::{Read,Write,Cursor,self};
 use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
-use std::net::{Ipv4Addr,Ipv6Addr};
+use std::net::{Ipv4Addr,Ipv6Addr, IpAddr};
 
 pub const RTM_NEWADDR: u16 = 20;
 pub const RTM_DELADDR: u16 = 21;
@@ -33,7 +33,7 @@ pub const RTM_GETADDR: u16 = 22;
 #[derive(Debug,Copy,Clone)]
 #[repr(u8)]
 pub enum Scope {
-    Global=0,
+    Universe=0,
     /* User defined values  */
     Site=200,
     Link=253,
@@ -106,14 +106,11 @@ impl<R: Read> Iterator for AddrsIterator<R> {
     }
 }
 
-/// Abstract over IP versions
-#[derive(Eq,PartialEq)]
-pub enum IpAddr {
-    V4(Ipv4Addr),
-    V6(Ipv6Addr),
+trait ToByteVec {
+    fn bytes(&self) -> Vec<u8>;
 }
 
-impl IpAddr {
+impl ToByteVec for IpAddr {
     fn bytes(&self) -> Vec<u8> {
         match self {
             &IpAddr::V4(ip) => {
@@ -122,29 +119,10 @@ impl IpAddr {
                 v
             },
             &IpAddr::V6(ip) => {
-                panic!("not implemented"); /* FIXME */
+                let mut v = Vec::new();
+                v.extend_from_slice(&ip.octets()[..]);
+                v
             }
-        }
-    }
-}
-
-impl From<Ipv6Addr> for IpAddr {
-    fn from(addr: Ipv6Addr) -> Self {
-        IpAddr::V6(addr)
-    }
-}
-
-impl From<Ipv4Addr> for IpAddr {
-    fn from(addr: Ipv4Addr) -> Self {
-        IpAddr::V4(addr)
-    }
-}
-
-impl ::std::fmt::Debug for IpAddr {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        match self {
-            &IpAddr::V4(ip) => ip.fmt(f),
-            &IpAddr::V6(ip) => ip.fmt(f),
         }
     }
 }
@@ -153,7 +131,7 @@ impl ::std::fmt::Debug for IpAddr {
 pub trait Addresses where Self: Read + Write {
     fn iter_addrs<'a>(&'a mut self, family: Option<u8>) -> io::Result<Box<Iterator<Item = Addr> + 'a>>;
     fn get_link_addrs<'a,'b>(&'a mut self, family: Option<u8>, link: &'b Link) -> io::Result<Box<Iterator<Item = Addr> + 'a>>;
-    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, scope: Scope) -> io::Result<()>;
+    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, dst_addr: Option<IpAddr>, scope: Scope) -> io::Result<()>;
 }
 
 impl Addresses for NetlinkConnection {
@@ -189,16 +167,19 @@ impl Addresses for NetlinkConnection {
     }
 
     /// Add address `addr` to `link` with scope `scope`
-    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, scope: Scope) -> io::Result<()> {
+    /// If `dst_addr` is not None, the IFA_ADDRESS will be set to `dst_addr`.
+    /// If `dst_addr` is None, the IFA_ADDRESS will be set to `addr`.
+    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, dst_addr: Option<IpAddr>, scope: Scope) -> io::Result<()> {
         let link_index = link.get_index();
         let family = match addr {
             IpAddr::V4(_) => 2,
             IpAddr::V6(_) => 10,
         };
         let prefix_len = 32; /* XXX: FIXME */
+        let ip_addr_len = addr.bytes().len();
         let mut buf = vec![0; MutableIfAddrPacket::minimum_packet_size()];
-        let mut rta_buf = vec![0; MutableRtAttrPacket::minimum_packet_size() + 4];
-        let mut rta_buf1 = vec![0; MutableRtAttrPacket::minimum_packet_size() + 4];
+        let mut rta_buf = vec![0; MutableRtAttrPacket::minimum_packet_size() + ip_addr_len];
+        let mut rta_buf1 = vec![0; MutableRtAttrPacket::minimum_packet_size() + ip_addr_len];
         let req = IfAddrRequestBuilder::new().with_ifa(|mut ifaddr| {
                 ifaddr.set_index(link_index);
                 ifaddr.set_family(family);
@@ -207,19 +188,19 @@ impl Addresses for NetlinkConnection {
         }).append({
             {
                 let mut pkt = MutableRtAttrPacket::new(&mut rta_buf).unwrap();
-                pkt.set_rta_len(4 + 4 /* FIXME: hardcoded ipv4 */);
+                pkt.set_rta_len(4 + ip_addr_len as u16);
                 pkt.set_rta_type(IFA_ADDRESS);
                 let mut pl = pkt.payload_mut();
-                pl.copy_from_slice(&addr.bytes()[0..4]);
+                pl.copy_from_slice(&dst_addr.as_ref().unwrap_or_else(|| &addr).bytes());
             }
             RtAttrPacket::new(&mut rta_buf).unwrap()
         }).append({
             {
                 let mut pkt = MutableRtAttrPacket::new(&mut rta_buf1).unwrap();
-                pkt.set_rta_len(4 + 4 /* FIXME: hardcoded ipv4 */);
+                pkt.set_rta_len(4 + ip_addr_len as u16);
                 pkt.set_rta_type(IFA_LOCAL);
                 let mut pl = pkt.payload_mut();
-                pl.copy_from_slice(&addr.bytes()[0..4]);
+                pl.copy_from_slice(&addr.bytes());
             }
             RtAttrPacket::new(&mut rta_buf1).unwrap()
         }).build();
