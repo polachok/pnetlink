@@ -11,14 +11,14 @@ license = "MIT"
 documentation = "https://docs.rs/pnetlink/0.0.2/pnetlink/"
 
 [build-dependencies.pnet_macros]
-version = "0.13"
+version = ">=0.13"
 features = [ "with-syntex" ]
 
 [dependencies.pnet_macros_support]
-version = "0.1.1"
+version = ">=0.1.1"
 
 [dependencies.pnet]
-version = "0.16"
+version = ">=0.16"
 features = [ "with-syntex" ]
 
 [build-dependencies.syntex]
@@ -28,6 +28,6 @@ version = "0.42"
 libc = "0.2"
 
 [dependencies]
-rand = "0.3.14"
+rand = ">=0.3.14"
 bitflags = "0.7"
-byteorder = "0.5.3"
+byteorder = ">=0.5.3"
