@@ -136,13 +136,8 @@ impl<R: Read> NetlinkReader<R> {
     /// Read to end ignoring everything but errors
     pub fn read_to_end(self) -> io::Result<()> {
         for pkt in self.into_iter() {
-            if pkt.get_kind() == NLMSG_ERROR {
-                let err = NetlinkErrorPacket::new(pkt.payload()).unwrap();
-                if err.get_error() != 0 {
-                    return Err(io::Error::from_raw_os_error(-(err.get_error() as i32)));
-                } else {
-                    break; // ACK
-                }
+            if let Some(err) = pkt.to_io_error() {
+                return Err(err);
             }
         }
         Ok(())
@@ -317,5 +312,22 @@ impl NetlinkRequestBuilder {
     /// Returns final packet
     pub fn build(self) -> NetlinkPacket<'static> {
         NetlinkPacket::owned(self.data).unwrap()
+    }
+}
+
+pub trait ToIoError {
+    fn to_io_error(&self) -> Option<io::Error>;
+}
+
+impl<'a> ToIoError for NetlinkPacket<'a> {
+    fn to_io_error(&self) -> Option<io::Error> {
+        if self.get_kind() == NLMSG_ERROR {
+            let err = NetlinkErrorPacket::new(self.payload()).unwrap();
+            if err.get_error() != 0 {
+                return Some(io::Error::from_raw_os_error(-(err.get_error() as i32)));
+            }
+        }
+
+        None
     }
 }
