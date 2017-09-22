@@ -131,7 +131,8 @@ impl ToByteVec for IpAddr {
 pub trait Addresses where Self: Read + Write {
     fn iter_addrs<'a>(&'a mut self, family: Option<u8>) -> io::Result<Box<Iterator<Item = Addr> + 'a>>;
     fn get_link_addrs<'a,'b>(&'a mut self, family: Option<u8>, link: &'b Link) -> io::Result<Box<Iterator<Item = Addr> + 'a>>;
-    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, dst_addr: Option<IpAddr>, scope: Scope) -> io::Result<()>;
+    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, dst_addr: Option<IpAddr>,
+                       scope: Scope, netmask_bits: u8) -> io::Result<()>;
 }
 
 impl Addresses for NetlinkConnection {
@@ -167,15 +168,17 @@ impl Addresses for NetlinkConnection {
     }
 
     /// Add address `addr` to `link` with scope `scope`
-    /// If `dst_addr` is not None, the IFA_ADDRESS will be set to `dst_addr`.
-    /// If `dst_addr` is None, the IFA_ADDRESS will be set to `addr`.
-    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, dst_addr: Option<IpAddr>, scope: Scope) -> io::Result<()> {
+    ///
+    /// * `dst_addr` - If `dst_addr` is not None, the IFA_ADDRESS will be set to `dst_addr`.
+    ///                If `dst_addr` is None, the IFA_ADDRESS will be set to `addr`.
+    /// * `netmask_bits` - The number of bits that should be set to 1 in the netmask.
+    fn add_addr<'a,'b>(&'a mut self, link: &'b Link, addr: IpAddr, dst_addr: Option<IpAddr>,
+                       scope: Scope, netmask_bits: u8) -> io::Result<()> {
         let link_index = link.get_index();
         let family = match addr {
             IpAddr::V4(_) => 2,
             IpAddr::V6(_) => 10,
         };
-        let prefix_len = 32; /* XXX: FIXME */
         let ip_addr_len = addr.bytes().len();
         let mut buf = vec![0; MutableIfAddrPacket::minimum_packet_size()];
         let mut rta_buf = vec![0; MutableRtAttrPacket::minimum_packet_size() + ip_addr_len];
@@ -184,7 +187,7 @@ impl Addresses for NetlinkConnection {
                 ifaddr.set_index(link_index);
                 ifaddr.set_family(family);
                 ifaddr.set_scope(scope);
-                ifaddr.set_prefix_len(prefix_len);
+                ifaddr.set_prefix_len(netmask_bits);
         }).append({
             {
                 let mut pkt = MutableRtAttrPacket::new(&mut rta_buf).unwrap();
