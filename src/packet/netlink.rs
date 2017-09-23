@@ -298,7 +298,7 @@ impl NetlinkRequestBuilder {
         let aligned_len = ::util::align(len as usize);
         {
             let mut pkt = MutableNetlinkPacket::new(&mut self.data).unwrap();
-            let new_len = pkt.get_length() + len as u32;
+            let new_len = pkt.get_length() + aligned_len as u32;
             pkt.set_length(new_len as u32);
         }
         self.data.extend_from_slice(data);
