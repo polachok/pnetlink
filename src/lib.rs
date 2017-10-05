@@ -4,7 +4,7 @@
 //! `socket` module can be used to establish Netlink socket
 //! `packet` contains high level functions and traits
 #[macro_use]
-extern crate bitflags; 
+extern crate bitflags;
 extern crate pnet;
 extern crate pnet_macros_support;
 extern crate libc;

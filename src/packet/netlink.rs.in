@@ -3,12 +3,11 @@ use pnet::packet::PrimitiveValues;
 
 #[packet]
 pub struct Netlink {
-    length: u32le,
-    kind: u16le, // NOOP | ERROR | DONE | OVERRUN
-    #[construct_with(u16le)]
-    flags: NetlinkMsgFlags,
-    seq: u32le,
-    pid: u32le,
+    length: u32he,
+    kind: u16he, // NOOP | ERROR | DONE | OVERRUN
+    #[construct_with(u16le)] flags: NetlinkMsgFlags,
+    seq: u32he,
+    pid: u32he,
     #[payload]
     #[length_fn = "payload_length"]
     payload: Vec<u8>,
@@ -16,9 +15,8 @@ pub struct Netlink {
 
 #[packet]
 pub struct NetlinkError {
-    error: u32le, // must be i32le
-    #[payload]
-    payload: Vec<u8>,
+    error: u32he, // must be i32he
+    #[payload] payload: Vec<u8>,
 }
 
 impl PrimitiveValues for NetlinkMsgFlags {
