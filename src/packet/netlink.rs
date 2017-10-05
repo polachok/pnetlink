@@ -1,7 +1,6 @@
 //! Netlink packet handling
 use ::socket::{NetlinkSocket,NetlinkProtocol};
 use libc;
-use std::mem;
 use std::io;
 use std::io::{Read,BufRead,BufReader,Write};
 use std::marker::PhantomData;
