@@ -16,18 +16,15 @@
 //! ```
 
 
-use packet::route::{IfInfoPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
-use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
-use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
-use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
+use packet::route::{IfInfoPacket, MutableIfInfoPacket, RtAttrIterator, RtAttrPacket,
+                    RtAttrMtuPacket};
+use packet::route::route::WithPayload;
+use packet::netlink::NetlinkPacket;
+use packet::netlink::{NLM_F_ACK,NLM_F_DUMP,NLM_F_EXCL,NLM_F_CREATE};
 use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
-use ::socket::{NetlinkSocket,NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
-use pnet::packet::MutablePacket;
 use pnet::packet::Packet;
-use pnet::packet::PacketSize;
 use pnet::util::MacAddr;
-use libc;
 use std::io::{Read,Write,self};
 
 /* rt message types */
@@ -243,8 +240,8 @@ impl Links for NetlinkConnection {
     }
 
     fn get_link_by_index(&mut self, index: u32) -> io::Result<Option<Link>> {
-        let mut req = {
-            let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
+        let req = {
+            let buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
             NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK)
             .append(
                 IfInfoPacketBuilder::new()
@@ -260,19 +257,9 @@ impl Links for NetlinkConnection {
 
     fn get_link_by_name(&mut self, name: &str) -> io::Result<Option<Link>> {
         let req = {
-            let name_len = name.as_bytes().len();
             NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK).append({
-                let mut buf = vec![0; RtAttrPacket::minimum_packet_size() + name_len + 1];
-                IfInfoPacketBuilder::new().append({
-                    {
-                        let mut ifname_rta = MutableRtAttrPacket::new(&mut buf).unwrap();
-                        ifname_rta.set_rta_type(IFLA_IFNAME);
-                        ifname_rta.set_rta_len((RtAttrPacket::minimum_packet_size() + name_len + 1) as u16);
-                        let mut payload = ifname_rta.payload_mut();
-                        payload[0..name_len].copy_from_slice(name.as_bytes());
-                    }
-                    RtAttrPacket::new(&buf[..]).unwrap()
-                }).build()
+                IfInfoPacketBuilder::new().append(
+                    RtAttrPacket::create_with_payload(IFLA_IFNAME, name)).build()
             }).build()
         };
         try!(self.write(req.packet()));
@@ -282,34 +269,11 @@ impl Links for NetlinkConnection {
     }
 
     fn new_dummy_link(&mut self, name: &str) -> io::Result<()> {
-        let mut ifi = {
-            let mut buf = vec![0; 32];
-            let name_len = name.as_bytes().len();
-            let mut buf_name = vec![0; RtAttrPacket::minimum_packet_size() + name_len + 1];
+        let ifi = {
             IfInfoPacketBuilder::new().
-                append({
-                    {
-                        let mut ifname_rta = MutableRtAttrPacket::new(&mut buf_name).unwrap();
-                        ifname_rta.set_rta_type(IFLA_IFNAME);
-                        ifname_rta.set_rta_len(4 + name_len as u16 + 1);
-                        let mut payload = ifname_rta.payload_mut();
-                        payload[0..name_len].copy_from_slice(name.as_bytes());
-                    }
-                    RtAttrPacket::new(&buf_name).unwrap()
-                }).
-                append({
-                    {
-                        let mut link_info_rta = MutableRtAttrPacket::new(&mut buf).unwrap();
-                        link_info_rta.set_rta_type(IFLA_LINKINFO);
-                        link_info_rta.set_rta_len(6 + 4 + 4);
-                        let mut info_kind_rta = MutableRtAttrPacket::new(link_info_rta.payload_mut()).unwrap();
-                        info_kind_rta.set_rta_type(IFLA_INFO_KIND);
-                        info_kind_rta.set_rta_len(6 + 4);
-                        let mut payload = info_kind_rta.payload_mut();
-                        payload[0..6].copy_from_slice(b"dummy\0");
-                    }
-                    RtAttrPacket::new(&buf).unwrap()
-            }).build()
+                append(RtAttrPacket::create_with_payload(IFLA_IFNAME, name)).
+                append(RtAttrPacket::create_with_payload(
+                    IFLA_LINKINFO, RtAttrPacket::create_with_payload(IFLA_INFO_KIND, "dummy"))).build()
         };
         let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
             .append(ifi).build();
@@ -320,7 +284,7 @@ impl Links for NetlinkConnection {
 
     fn delete_link(&mut self, link: Link) -> io::Result<()> {
         let index = link.get_index();
-        let mut req = {
+        let req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
             NetlinkRequestBuilder::new(RTM_DELLINK, NLM_F_ACK)
             .append({
@@ -336,7 +300,7 @@ impl Links for NetlinkConnection {
     }
 
     fn link_set_down(&mut self, index: u32) -> io::Result<()> {
-        let mut req = {
+        let req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
             NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_ACK)
                 .append({
@@ -353,9 +317,9 @@ impl Links for NetlinkConnection {
        let reader = NetlinkReader::new(self);
        reader.read_to_end()
     }
-    
+
     fn link_set_up(&mut self, index: u32) -> io::Result<()> {
-        let mut req = {
+        let req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
             NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_ACK)
                 .append({
@@ -437,7 +401,6 @@ impl Link {
     pub fn get_name(&self) -> Option<String> {
         use std::ffi::CStr;
         self.with_rta(IFLA_IFNAME, |rta| {
-            let payload = rta.payload();
             let cstr = CStr::from_bytes_with_nul(rta.payload()).unwrap();
             cstr.to_owned().into_string().unwrap()
         })
@@ -451,7 +414,7 @@ impl Link {
 
     fn with_ifinfo<T,F>(&self, cb: F) -> T
         where F: Fn(IfInfoPacket) -> T {
-        self.with_packet(|pkt| 
+        self.with_packet(|pkt|
             cb(IfInfoPacket::new(pkt.payload()).unwrap())
         )
     }
@@ -526,7 +489,7 @@ pub struct IfInfoPacketBuilder {
 impl IfInfoPacketBuilder {
     pub fn new() -> Self {
         let len = MutableIfInfoPacket::minimum_packet_size();
-        let mut data = vec![0; len];
+        let data = vec![0; len];
         IfInfoPacketBuilder { data: data }
     }
 
@@ -593,7 +556,7 @@ mod tests {
     #[test]
     fn find_lo() {
         use ::packet::netlink::NetlinkConnection;
-        use ::packet::route::link::{Link,Links};
+        use ::packet::route::link::Links;
 
         let mut conn = NetlinkConnection::new();
         let lo0 = conn.get_link_by_name("lo").unwrap();
@@ -610,7 +573,7 @@ mod tests {
     // root permissions required
     fn create_and_delete_link() {
         use ::packet::netlink::NetlinkConnection;
-        use ::packet::route::link::{Link,Links};
+        use ::packet::route::link::Links;
 
         let mut conn = NetlinkConnection::new();
         conn.new_dummy_link("test1488").unwrap();

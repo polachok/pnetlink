@@ -1,22 +1,19 @@
 //! Route operations
-use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableRtMsgPacket, MutableIfInfoPacket,
+use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableIfInfoPacket,
                     RtAttrIterator, RtAttrPacket, MutableRtAttrPacket};
-use packet::route::link::Link;
-use packet::netlink::{MutableNetlinkPacket, NetlinkPacket, NetlinkErrorPacket};
-use packet::netlink::{NLM_F_ACK, NLM_F_REQUEST, NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
-use packet::netlink::{NLMSG_NOOP, NLMSG_ERROR, NLMSG_DONE, NLMSG_OVERRUN};
+use packet::netlink::NetlinkPacket;
+use packet::netlink::{NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
+use packet::netlink::{NLMSG_ERROR, NLMSG_DONE, NLMSG_OVERRUN};
 use packet::netlink::{NetlinkBufIterator, NetlinkReader, NetlinkRequestBuilder};
-use socket::{NetlinkSocket, NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
 use pnet::packet::MutablePacket;
 use pnet::packet::Packet;
 use pnet::packet::PacketSize;
-use pnet::util::MacAddr;
-use libc;
+use util;
 
-use std::net::Ipv4Addr;
-use std::io::{self, Read, Cursor};
-use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
+use std::net::{Ipv4Addr, IpAddr};
+use std::io::{Read, Cursor};
+use byteorder::{LittleEndian, BigEndian, ReadBytesExt, NativeEndian, ByteOrder};
 
 pub const RTM_NEWROUTE: u16 = 24;
 pub const RTM_DELROUTE: u16 = 25;
@@ -180,5 +177,132 @@ fn dump_routes() {
     let mut conn = NetlinkConnection::new();
     for route in Route::iter_routes(&mut conn) {
         Route::dump_route(route.packet);
+    }
+}
+
+/// A trait for converting data into Payload for a `RtAttrPacket`.
+pub trait ToPayload {
+    /// Add this data to the given u8 data slice.
+    /// The `payload` expects that the data begins from index 0.
+    /// The length of `payload` is at least `payload_size()` long.
+    fn payload_add(&self, payload: &mut [u8]);
+    /// The number of bytes required to encode this data.
+    fn payload_size(&self) -> usize;
+}
+
+impl ToPayload for IpAddr {
+    fn payload_add(&self, payload: &mut [u8]) {
+        match self {
+            &IpAddr::V4(ip) => {
+                payload.copy_from_slice(&ip.octets());
+            }
+            &IpAddr::V6(ip) => {
+                payload.copy_from_slice(&ip.octets());
+            }
+        }
+    }
+
+    fn payload_size(&self) -> usize {
+        match self {
+            &IpAddr::V4(_) => 4,
+            &IpAddr::V6(_) => 16,
+        }
+    }
+}
+
+impl<'a> ToPayload for &'a str {
+    fn payload_add(&self, payload: &mut [u8]) {
+        payload[..self.as_bytes().len()].copy_from_slice(self.as_bytes())
+    }
+
+    fn payload_size(&self) -> usize {
+        self.as_bytes().len() + 1
+    }
+}
+
+impl<'a> ToPayload for &'a [&'a ToPayload] {
+    fn payload_add(&self, payload: &mut [u8]) {
+        self.iter().fold(0, |pos, pkg| {
+            pkg.payload_add(&mut payload[pos..]);
+            pos + pkg.payload_size()
+        });
+    }
+
+    fn payload_size(&self) -> usize {
+        self.iter().map(|p| p.payload_size()).sum()
+    }
+}
+
+impl<P: ToPayload> ToPayload for Option<P> {
+    fn payload_add(&self, payload: &mut [u8]) {
+        self.as_ref().map(|d| d.payload_add(payload));
+    }
+
+    fn payload_size(&self) -> usize {
+        self.as_ref().map(|d| d.payload_size()).unwrap_or(0)
+    }
+}
+
+impl ToPayload for u16 {
+    fn payload_add(&self, payload: &mut [u8]) {
+        NativeEndian::write_u16(payload, *self)
+    }
+
+    fn payload_size(&self) -> usize {
+        2
+    }
+}
+
+impl ToPayload for u32 {
+    fn payload_add(&self, payload: &mut [u8]) {
+        NativeEndian::write_u32(payload, *self)
+    }
+
+    fn payload_size(&self) -> usize {
+        4
+    }
+}
+
+impl ToPayload for u8 {
+    fn payload_add(&self, payload: &mut [u8]) {
+        payload[0] = *self
+    }
+
+    fn payload_size(&self) -> usize {
+        1
+    }
+}
+
+impl<'a> ToPayload for RtAttrPacket<'a> {
+    fn payload_add(&self, payload: &mut [u8]) {
+        payload[..self.packet_size()].copy_from_slice(&self.packet())
+    }
+
+    fn payload_size(&self) -> usize {
+        util::align(self.packet_size())
+    }
+}
+
+/// A trait that provides a function to create a new `RtAttrPacket` with a payload.
+pub trait WithPayload {
+    /// Create a new `RtAttrPacket` with the given kind and payload.
+    fn create_with_payload<P: ToPayload>(kind: u16, payload: P) -> RtAttrPacket<'static>;
+}
+
+impl<'a> WithPayload for RtAttrPacket<'a> {
+    fn create_with_payload<P: ToPayload>(kind: u16, payload: P) -> RtAttrPacket<'static> {
+        let total_len = RtAttrPacket::minimum_packet_size() + payload.payload_size();
+        let mut buf = vec![0; total_len];
+        let result = {
+            let mut packet = MutableRtAttrPacket::new(&mut buf).unwrap();
+            packet.set_rta_type(kind);
+            packet.set_rta_len(total_len as u16);
+
+            payload.payload_add(&mut packet.payload_mut());
+
+            packet.consume_to_immutable()
+        };
+
+        RtAttrPacket::owned(result.packet().to_vec()).unwrap()
     }
 }
