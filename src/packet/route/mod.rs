@@ -2,18 +2,6 @@
 //!
 //! Different layer operations are implemented as traits 
 //! on NetlinkConnection
-use packet::netlink::{MutableNetlinkPacket,NetlinkPacket};
-use packet::netlink::{NLM_F_REQUEST, NLM_F_DUMP};
-use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
-use packet::netlink::{NetlinkBufIterator};
-use ::socket::{NetlinkSocket,NetlinkProtocol};
-use packet::netlink::NetlinkConnection;
-use pnet::packet::MutablePacket;
-use pnet::packet::Packet;
-use pnet::packet::PacketSize;
-use libc;
-use std::io::Read;
-
 pub mod addr;
 pub mod link;
 pub mod neighbour;
@@ -46,7 +34,7 @@ impl<'a> Iterator for RtAttrIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(rta) = RtAttrPacket::new(&self.buf[..]) {
-            let len = rta.get_rta_len() as usize; 
+            let len = rta.get_rta_len() as usize;
             if len < 4 {
                 return None;
             }
