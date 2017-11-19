@@ -1,6 +1,7 @@
 //! Route operations
 use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableIfInfoPacket,
-                    RtAttrIterator, RtAttrPacket, MutableRtAttrPacket};
+                    RtAttrIterator, RtAttrPacket, MutableRtAttrPacket,
+                    IfInfoPacket};
 use packet::netlink::NetlinkPacket;
 use packet::netlink::{NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
 use packet::netlink::{NLMSG_ERROR, NLMSG_DONE, NLMSG_OVERRUN};
@@ -76,6 +77,11 @@ pub const RTA_SESSION: u16 = 13; /* no longer used */
 pub const RTA_MP_ALGO: u16 = 14; /* no longer used */
 pub const RTA_TABLE: u16 = 15;
 pub const RTA_MARK: u16 = 16;
+
+pub enum Nested<'a> {
+    RtAttr(RtAttrPacket<'a>),
+    InfoAttr(IfInfoPacket<'a>)
+}
 
 #[derive(Debug)]
 pub struct Route {
@@ -280,6 +286,58 @@ impl<'a> ToPayload for RtAttrPacket<'a> {
 
     fn payload_size(&self) -> usize {
         util::align(self.packet_size())
+    }
+}
+
+impl<'a> ToPayload for &'a [&'a Nested<'a>] {
+    fn payload_add(&self, payload: &mut [u8]) {
+        self.iter().fold(0, |pos, pkg| {
+            pkg.payload_add(&mut payload[pos..]);
+            pos + pkg.payload_size()
+        });
+    }
+
+    fn payload_size(&self) -> usize {
+        self.iter().map(|p| p.payload_size()).sum()
+    }
+}
+
+impl<'a> ToPayload for &'a [u8] {
+    fn payload_add(&self, payload: &mut [u8]) {
+        payload[..self.len()].copy_from_slice(self)
+    }
+
+    fn payload_size(&self) -> usize {
+        self.len() + 1
+    }
+}
+
+impl<'a> ToPayload for Nested<'a> {
+    fn payload_add(&self, payload: &mut [u8]) {
+        match *self {
+            Nested::RtAttr(ref r) => payload[..r.packet_size()].copy_from_slice(&r.packet()),
+            Nested::InfoAttr(ref i) => payload[..i.packet_size()].copy_from_slice(&i.packet()),
+        }
+    }
+
+    fn payload_size(&self) -> usize {
+        match *self {
+            Nested::RtAttr(ref r) => util::align(r.packet_size()),
+            Nested::InfoAttr(ref i) => util::align(i.packet_size()),
+        }
+    }
+}
+
+impl<'a> ToPayload for &'a [&'a RtAttrPacket<'a>] {
+    fn payload_add(&self, payload: &mut [u8]) {
+        self.iter().fold(0, |pos, pkg| {
+            pkg.payload_add(&mut payload[pos..]);
+            pos + pkg.payload_size()
+        });
+    }
+
+    fn payload_size(&self) -> usize {
+        self.iter().map(|p| p.payload_size()).sum()
     }
 }
 
