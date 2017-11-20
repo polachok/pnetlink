@@ -64,10 +64,10 @@ pub struct IfAddr {
 /* IfAddr cache_info struct */
 #[packet]
 pub struct IfAddrCacheInfo {
-    ifa_prefered: u32he,
-    ifa_valid: u32he,
-    created: u32he, /* created timestamp, hundredths of seconds */
-    updated: u32he, /* updated timestamp, hundredths of seconds */
+    ifa_prefered: u32le,
+    ifa_valid: u32le,
+    created: u32le, /* created timestamp, hundredths of seconds */
+    updated: u32le, /* updated timestamp, hundredths of seconds */
     #[payload]
     #[length="0"]
     payload: Vec<u8>,
@@ -77,8 +77,8 @@ pub struct IfAddrCacheInfo {
 pub struct NeighbourDiscovery {
     family: u8,
     pad1: u8,
-    pad2: u16he,
-    ifindex: u32he, // Should be i32he, not implemented?
+    pad2: u16le,
+    ifindex: u32le, // Should be i32le, not implemented?
     #[construct_with(u16le)]
     state: NeighbourState,
     #[construct_with(u8)]
@@ -114,7 +114,7 @@ pub struct RtMsg {
     #[construct_with(u8)]
     rtm_scope: Scope,
 
-    rtm_flags: u32he,
+    rtm_flags: u32le,
     _padding: u8,
     #[payload]
     payload: Vec<u8>,
@@ -123,14 +123,14 @@ pub struct RtMsg {
 /* rta_cacheinfo: linux/rtnetlink.h */
 #[packet]
 pub struct RouteCacheInfo {
-    rta_clntref: u32he,
-    rta_lastuse: u32he,
-    rta_expires: u32he,
-    rta_error: u32he,
-    rta_used: u32he,
-    rta_id: u32he,
-    rta_ts: u32he,
-    rta_tsusage: u32he,
+    rta_clntref: u32le,
+    rta_lastuse: u32le,
+    rta_expires: u32le,
+    rta_error: u32le,
+    rta_used: u32le,
+    rta_id: u32le,
+    rta_ts: u32le,
+    rta_tsusage: u32le,
     #[payload]
     #[length="0"]
     payload: Vec<u8>,
@@ -155,8 +155,8 @@ pub struct FibRule {
 
 #[packet]
 pub struct RtAttr {
-    rta_len: u16he,
-    rta_type: u16he,
+    rta_len: u16le,
+    rta_type: u16le,
     #[payload]
     #[length_fn = "rtattr_len"]
     payload: Vec<u8>,
@@ -168,9 +168,9 @@ fn rtattr_len(pkt: &RtAttrPacket) -> usize {
 
 #[packet]
 pub struct RtAttrMtu {
-    rta_len: u16he,
-    rta_type: u16he,
-    mtu: u32he,
+    rta_len: u16le,
+    rta_type: u16le,
+    mtu: u32le,
     #[payload]
     #[length = "0"]
     _payload: Vec<u8>,
