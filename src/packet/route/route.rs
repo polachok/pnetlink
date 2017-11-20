@@ -283,6 +283,16 @@ impl<'a> ToPayload for RtAttrPacket<'a> {
     }
 }
 
+impl<'a> ToPayload for IfInfoPacket<'a> {
+    fn payload_add(&self, payload: &mut [u8]) {
+        payload[..self.packet_size()].copy_from_slice(&self.packet())
+    }
+
+    fn payload_size(&self) -> usize {
+        util::align(self.packet_size())
+    }
+}
+
 /// A trait that provides a function to create a new `RtAttrPacket` with a payload.
 pub trait WithPayload {
     /// Create a new `RtAttrPacket` with the given kind and payload.
