@@ -1,5 +1,5 @@
 //! Route operations
-use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableIfInfoPacket,
+use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableIfInfoPacket, IfInfoPacket,
                     RtAttrIterator, RtAttrPacket, MutableRtAttrPacket};
 use packet::netlink::NetlinkPacket;
 use packet::netlink::{NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
