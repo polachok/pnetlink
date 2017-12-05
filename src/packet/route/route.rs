@@ -1,5 +1,5 @@
 //! Route operations
-use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableIfInfoPacket,
+use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableIfInfoPacket, IfInfoPacket,
                     RtAttrIterator, RtAttrPacket, MutableRtAttrPacket};
 use packet::netlink::NetlinkPacket;
 use packet::netlink::{NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
@@ -274,6 +274,16 @@ impl ToPayload for u8 {
 }
 
 impl<'a> ToPayload for RtAttrPacket<'a> {
+    fn payload_add(&self, payload: &mut [u8]) {
+        payload[..self.packet_size()].copy_from_slice(&self.packet())
+    }
+
+    fn payload_size(&self) -> usize {
+        util::align(self.packet_size())
+    }
+}
+
+impl<'a> ToPayload for IfInfoPacket<'a> {
     fn payload_add(&self, payload: &mut [u8]) {
         payload[..self.packet_size()].copy_from_slice(&self.packet())
     }
