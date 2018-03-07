@@ -11,8 +11,7 @@ use packet::route::{NeighbourDiscoveryPacket, MutableNeighbourDiscoveryPacket, R
                     RtAttrPacket, MutableRtAttrPacket, RtAttrMtuPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket, NetlinkPacket, NetlinkErrorPacket};
-use packet::netlink::{NLM_F_ACK, NLM_F_REQUEST, NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
-use packet::netlink::{NLMSG_NOOP, NLMSG_ERROR, NLMSG_DONE, NLMSG_OVERRUN};
+use packet::netlink::NetlinkMsgFlags;
 use packet::netlink::{NetlinkBufIterator, NetlinkReader, NetlinkRequestBuilder};
 use ::socket::{NetlinkSocket, NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
@@ -83,18 +82,18 @@ pub enum LinkType {
 
 // neighbour states
 bitflags! {
-    pub flags NeighbourState: u16 {
-        const INCOMPLETE =  0x1,    /* Still attempting to resolve. */
-        const REACHABLE  =  0x2,    /* A confirmed working cache entry. */
-        const STALE      =  0x4,    /* an expired cache entry. */
-        const DELAY      =  0x8,    /* Neighbor no longer reachable.
+    pub struct NeighbourState: u16 {
+        const INCOMPLETE =  0x1;    /* Still attempting to resolve. */
+        const REACHABLE  =  0x2;    /* A confirmed working cache entry. */
+        const STALE      =  0x4;    /* an expired cache entry. */
+        const DELAY      =  0x8;    /* Neighbor no longer reachable.
                                        Traffic sent, waiting for confirmation. */
-        const PROBE      = 0x10,    /* A cache entry that is currently
+        const PROBE      = 0x10;    /* A cache entry that is currently
                                        being re-solicited.*/
-        const FAILED     = 0x20,    /* An invalid cache entry. */
+        const FAILED     = 0x20;    /* An invalid cache entry. */
         /* Dummy states */
-        const NOARP      = 0x40,    /* A device that does not do neighbour discovery */
-        const PERMANENT  = 0x80,    /* Permanently set entries */
+        const NOARP      = 0x40;    /* A device that does not do neighbour discovery */
+        const PERMANENT  = 0x80;    /* Permanently set entries */
     }
 }
 
@@ -106,13 +105,13 @@ impl NeighbourState {
 
 // neighbour flags
 bitflags! {
-    pub flags NeighbourFlags: u8 {
-        const USE         =  0x1,
-        const SELF        =  0x2,
-        const MASTER      =  0x4,
-        const PROXY       =  0x8,
-        const EXT_LEARNED = 0x10,
-        const ROUTER      = 0x80,
+    pub struct NeighbourFlags: u8 {
+        const USE         =  0x1;
+        const SELF        =  0x2;
+        const MASTER      =  0x4;
+        const PROXY       =  0x8;
+        const EXT_LEARNED = 0x10;
+        const ROUTER      = 0x80;
     }
 }
 
@@ -229,7 +228,7 @@ impl Neighbours for NetlinkConnection {
         // NB: This should be a IfInfoPacket because - well see rtnetlink.c in Linux - but they pun
         // successfully.
         //
-        let req = NetlinkRequestBuilder::new(RTM_GETNEIGH, NLM_F_DUMP)
+        let req = NetlinkRequestBuilder::new(RTM_GETNEIGH, NetlinkMsgFlags::NLM_F_DUMP)
             .append(match link {
                     Some(link) => {
                         NeighbourDiscoveryPacketBuilder::new().set_ifindex(link.get_index())

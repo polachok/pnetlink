@@ -2,8 +2,7 @@
 use packet::route::{IfAddrCacheInfoPacket,MutableIfInfoPacket,IfAddrPacket,MutableIfAddrPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket,RtAttrMtuPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
-use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
-use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
+use packet::netlink::NetlinkMsgFlags;
 use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
 use socket::{NetlinkSocket,NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
@@ -50,16 +49,16 @@ impl Scope {
 
 /* link flags */
 bitflags! {
-    pub flags IfAddrFlags: u8 {
-        const SECONDARY = 0x01,
-        const TEMPORARY = SECONDARY.bits,
-        const NODAD = 0x02,
-        const OPTIMISTIC = 0x04,
-        const DADFAILED = 0x08,
-        const HOMEADDRESS = 0x10,
-        const DEPRECATED = 0x20,
-        const TENTATIVE = 0x40,
-        const PERMANENT = 0x80,
+    pub struct IfAddrFlags: u8 {
+        const SECONDARY = 0x01;
+        const TEMPORARY = Self::SECONDARY.bits;
+        const NODAD = 0x02;
+        const OPTIMISTIC = 0x04;
+        const DADFAILED = 0x08;
+        const HOMEADDRESS = 0x10;
+        const DEPRECATED = 0x20;
+        const TENTATIVE = 0x40;
+        const PERMANENT = 0x80;
     }
 }
 
@@ -139,7 +138,7 @@ impl Addresses for NetlinkConnection {
     /// Iterate over all addresses
     fn iter_addrs<'a>(&'a mut self, family: Option<u8>) -> io::Result<Box<Iterator<Item = Addr> + 'a>> {
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-        let req = NetlinkRequestBuilder::new(RTM_GETADDR, NLM_F_DUMP)
+        let req = NetlinkRequestBuilder::new(RTM_GETADDR, NetlinkMsgFlags::NLM_F_DUMP)
             .append({
                 let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                 ifinfo.set_family(family.unwrap_or(0));
@@ -155,7 +154,7 @@ impl Addresses for NetlinkConnection {
     fn get_link_addrs<'a,'b>(&'a mut self, family: Option<u8>, link: &'b Link) -> io::Result<Box<Iterator<Item = Addr> + 'a>> {
         let idx = link.get_index();
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-        let req = NetlinkRequestBuilder::new(RTM_GETADDR, NLM_F_DUMP)
+        let req = NetlinkRequestBuilder::new(RTM_GETADDR, NetlinkMsgFlags::NLM_F_DUMP)
             .append({
                 let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                 ifinfo.set_family(family.unwrap_or(0));
@@ -207,7 +206,7 @@ impl Addresses for NetlinkConnection {
             }
             RtAttrPacket::new(&mut rta_buf1).unwrap()
         }).build();
-        let req = NetlinkRequestBuilder::new(RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
+        let req = NetlinkRequestBuilder::new(RTM_NEWADDR, NetlinkMsgFlags::NLM_F_CREATE | NetlinkMsgFlags::NLM_F_EXCL | NetlinkMsgFlags::NLM_F_ACK)
             .append(req).build();
         self.write(req.packet());
         let reader = NetlinkReader::new(self);
@@ -386,7 +385,7 @@ impl Addr {
 
     pub fn iter_addrs(conn: &mut NetlinkConnection) -> AddrsIterator<&mut NetlinkConnection> {
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-        let req = NetlinkRequestBuilder::new(RTM_GETADDR, NLM_F_DUMP)
+        let req = NetlinkRequestBuilder::new(RTM_GETADDR, NetlinkMsgFlags::NLM_F_DUMP)
         .append({
             let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
             ifinfo.set_family(0 /* AF_UNSPEC */);
