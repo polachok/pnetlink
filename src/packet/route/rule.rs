@@ -2,8 +2,7 @@
 use packet::route::{FibRulePacket,MutableRtMsgPacket,MutableIfInfoPacket,RtAttrIterator,RtAttrPacket,MutableRtAttrPacket};
 use packet::route::link::Link;
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket,NetlinkErrorPacket};
-use packet::netlink::{NLM_F_ACK,NLM_F_REQUEST,NLM_F_DUMP,NLM_F_MATCH,NLM_F_EXCL,NLM_F_CREATE};
-use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
+use packet::netlink::NetlinkMsgFlags;
 use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
 use socket::{NetlinkSocket,NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
@@ -49,7 +48,7 @@ impl Rule {
     /// iterate over rules
     pub fn iter_rules(conn: &mut NetlinkConnection) -> RulesIterator<&mut NetlinkConnection> {
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-        let req = NetlinkRequestBuilder::new(RTM_GETRULE, NLM_F_DUMP)
+        let req = NetlinkRequestBuilder::new(RTM_GETRULE, NetlinkMsgFlags::NLM_F_DUMP)
             .append({
                 let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                 ifinfo.set_family(0 /* AF_UNSPEC */);

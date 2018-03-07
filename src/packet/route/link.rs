@@ -20,7 +20,7 @@ use packet::route::{IfInfoPacket, MutableIfInfoPacket, RtAttrIterator, RtAttrPac
                     RtAttrMtuPacket};
 use packet::route::route::WithPayload;
 use packet::netlink::NetlinkPacket;
-use packet::netlink::{NLM_F_ACK,NLM_F_DUMP,NLM_F_EXCL,NLM_F_CREATE};
+use packet::netlink::NetlinkMsgFlags;
 use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
 use packet::netlink::NetlinkConnection;
 use pnet::packet::Packet;
@@ -116,45 +116,45 @@ pub enum LinkType {
 
 /// Interface (link) flags
 bitflags! {
-    pub flags IfFlags: u32 {
+    pub struct IfFlags: u32 {
         /// interface is up
-        const UP      =    0x1,
+        const UP      =    0x1;
         /// broadcast address valid
-        const BROADCAST =  0x2,
+        const BROADCAST =  0x2;
         /// turn on debugging
-        const DEBUG    =   0x4,
+        const DEBUG    =   0x4;
         /// is a loopback net
-        const LOOPBACK  =  0x8,
+        const LOOPBACK  =  0x8;
         /// interface is a p-p link
-        const POINTOPOINT = 0x10,
+        const POINTOPOINT = 0x10;
         /// avoid use of trailers
-        const NOTRAILERS = 0x20,
+        const NOTRAILERS = 0x20;
         /// interface RFC2863 OPER_UP
-        const RUNNING   =  0x40,
+        const RUNNING   =  0x40;
         /// no ARP protocol
-        const NOARP     =  0x80,
+        const NOARP     =  0x80;
         /// receive all packets
-        const PROMISC   =  0x100,
+        const PROMISC   =  0x100;
         /// receive all multicast packets
-        const ALLMULTI  =  0x200,
+        const ALLMULTI  =  0x200;
         /// master of a load balancer
-        const MASTER    =  0x400,
+        const MASTER    =  0x400;
         /// slave of a load balancer
-        const SLAVE     =  0x800,           
+        const SLAVE     =  0x800;
         /// Supports multicast
-        const MULTICAST =  0x1000,
+        const MULTICAST =  0x1000;
         /// can set media type
-        const PORTSEL   =  0x2000,
+        const PORTSEL   =  0x2000;
         /// auto media select active
-        const AUTOMEDIA =  0x4000,
+        const AUTOMEDIA =  0x4000;
         /// dialup device with changing addresses
-        const DYNAMIC   =  0x8000,
+        const DYNAMIC   =  0x8000;
         /// driver signals L1 up
-        const LOWER_UP  =  0x10000,
+        const LOWER_UP  =  0x10000;
         /// driver signals dormant
-        const DORMANT   =  0x20000,
+        const DORMANT   =  0x20000;
         /// echo sent packets
-        const ECHO      =  0x40000,
+        const ECHO      =  0x40000;
     }
 }
 
@@ -229,7 +229,7 @@ pub trait Links where Self: Read + Write {
 
 impl Links for NetlinkConnection {
     fn iter_links(&mut self) -> io::Result<Box<LinksIterator<&mut Self>>> {
-        let req = NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_DUMP)
+        let req = NetlinkRequestBuilder::new(RTM_GETLINK, NetlinkMsgFlags::NLM_F_DUMP)
             .append(
                 IfInfoPacketBuilder::new()
                     .build()
@@ -242,7 +242,7 @@ impl Links for NetlinkConnection {
     fn get_link_by_index(&mut self, index: u32) -> io::Result<Option<Link>> {
         let req = {
             let buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK)
+            NetlinkRequestBuilder::new(RTM_GETLINK, NetlinkMsgFlags::NLM_F_ACK)
             .append(
                 IfInfoPacketBuilder::new()
                     .set_index(index)
@@ -257,7 +257,7 @@ impl Links for NetlinkConnection {
 
     fn get_link_by_name(&mut self, name: &str) -> io::Result<Option<Link>> {
         let req = {
-            NetlinkRequestBuilder::new(RTM_GETLINK, NLM_F_ACK).append({
+            NetlinkRequestBuilder::new(RTM_GETLINK, NetlinkMsgFlags::NLM_F_ACK).append({
                 IfInfoPacketBuilder::new().append(
                     RtAttrPacket::create_with_payload(IFLA_IFNAME, name)).build()
             }).build()
@@ -275,7 +275,7 @@ impl Links for NetlinkConnection {
                 append(RtAttrPacket::create_with_payload(
                     IFLA_LINKINFO, RtAttrPacket::create_with_payload(IFLA_INFO_KIND, "dummy"))).build()
         };
-        let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_CREATE | NLM_F_EXCL | NLM_F_ACK)
+        let req = NetlinkRequestBuilder::new(RTM_NEWLINK, NetlinkMsgFlags::NLM_F_CREATE | NetlinkMsgFlags::NLM_F_EXCL | NetlinkMsgFlags::NLM_F_ACK)
             .append(ifi).build();
         try!(self.write(req.packet()));
         let reader = NetlinkReader::new(self);
@@ -286,7 +286,7 @@ impl Links for NetlinkConnection {
         let index = link.get_index();
         let req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-            NetlinkRequestBuilder::new(RTM_DELLINK, NLM_F_ACK)
+            NetlinkRequestBuilder::new(RTM_DELLINK, NetlinkMsgFlags::NLM_F_ACK)
             .append({
                 let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                 ifinfo.set_family(0 /* AF_UNSPEC */);
@@ -302,13 +302,13 @@ impl Links for NetlinkConnection {
     fn link_set_down(&mut self, index: u32) -> io::Result<()> {
         let req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-            NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_ACK)
+            NetlinkRequestBuilder::new(RTM_NEWLINK, NetlinkMsgFlags::NLM_F_ACK)
                 .append({
                     let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                     ifinfo.set_family(0 /* AF_UNSPEC */);
                     ifinfo.set_index(index);
-                    ifinfo.set_change(UP.bits);
-                    ifinfo.set_flags(IfFlags::new(0) & !UP);
+                    ifinfo.set_change(IfFlags::UP.bits);
+                    ifinfo.set_flags(IfFlags::new(0) & !IfFlags::UP);
                     ifinfo
                 }).build()
         };
@@ -321,13 +321,13 @@ impl Links for NetlinkConnection {
     fn link_set_up(&mut self, index: u32) -> io::Result<()> {
         let req = {
             let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-            NetlinkRequestBuilder::new(RTM_NEWLINK, NLM_F_ACK)
+            NetlinkRequestBuilder::new(RTM_NEWLINK, NetlinkMsgFlags::NLM_F_ACK)
                 .append({
                     let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                     ifinfo.set_family(0 /* AF_UNSPEC */);
                     ifinfo.set_index(index);
-                    ifinfo.set_change(UP.bits);
-                    ifinfo.set_flags(UP);
+                    ifinfo.set_change(IfFlags::UP.bits);
+                    ifinfo.set_flags(IfFlags::UP);
                     ifinfo
                 }).build()
         };
@@ -588,7 +588,8 @@ mod tests {
     // CAP_NET_ADMIN needed
     fn up_and_down_link() {
         use ::packet::netlink::NetlinkConnection;
-        use ::packet::route::link::{Links, UP};
+        use ::packet::route::link::Links;
+        use ::packet::route::link::IfFlags;
 
         let linkname = "test1489";
 
@@ -600,12 +601,12 @@ mod tests {
 
         let link = conn.get_link_by_name(linkname).unwrap().unwrap();
 
-        assert!(link.get_flags() & UP == UP ); // Is up
+        assert!(link.get_flags() & IfFlags::UP == IfFlags::UP ); // Is up
 
         conn.link_set_down(link.get_index()).unwrap();
 
         let link = conn.get_link_by_name(linkname).unwrap().unwrap();
-        assert!((link.get_flags() & UP).is_empty() ); // Is down
+        assert!((link.get_flags() & IfFlags::UP).is_empty() ); // Is down
 
         conn.delete_link(link);
     }

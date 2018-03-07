@@ -9,7 +9,6 @@ const FILES: &'static [&'static str] = &["netlink.rs", "route/route.rs", "audit/
 
 fn main() {
     let out_dir = env::var_os("OUT_DIR").unwrap();
-
     for file in FILES {
         let src_file = format!("src/packet/{}.in", file);
         let src = Path::new(&src_file);
