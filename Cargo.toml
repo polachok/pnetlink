@@ -12,7 +12,7 @@ documentation = "https://docs.rs/pnetlink/"
 
 [dependencies]
 rand = "0.4"
-bitflags = "0.7"
+bitflags = "1"
 byteorder = "1"
 libc = "0.2"
 pnet = "0.21"

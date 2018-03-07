@@ -1,6 +1,5 @@
 use packet::netlink::{MutableNetlinkPacket,NetlinkPacket};
-use packet::netlink::{NLM_F_ACK, NLM_F_REQUEST, NLM_F_DUMP};
-use packet::netlink::{NLMSG_NOOP,NLMSG_ERROR,NLMSG_DONE,NLMSG_OVERRUN};
+use packet::netlink::NetlinkMsgFlags;
 use packet::netlink::{NetlinkBufIterator,NetlinkReader,NetlinkRequestBuilder};
 use ::socket::{NetlinkSocket,NetlinkProtocol};
 use packet::netlink::NetlinkConnection;
@@ -19,7 +18,7 @@ pub trait Audit where Self: Read + Write {
 impl Audit for NetlinkConnection {
     fn audit_enable<'a>(&'a mut self) -> ::std::io::Result<()> {
         let mut buf = vec![0; MutableAuditStatusPacket::minimum_packet_size()];
-        let req = NetlinkRequestBuilder::new(1001, NLM_F_REQUEST | NLM_F_ACK)
+        let req = NetlinkRequestBuilder::new(1001, NetlinkMsgFlags::NLM_F_REQUEST | NetlinkMsgFlags::NLM_F_ACK)
             .append({
                 let mut status = MutableAuditStatusPacket::new(&mut buf).unwrap();
                 status.set_mask(1);

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use pnetlink::packet::netlink::NetlinkConnection;
 use pnetlink::packet::route::link::{Links, Link};
-use pnetlink::packet::route::neighbour::{Neighbour, Neighbours, NOARP};
+use pnetlink::packet::route::neighbour::{Neighbour, Neighbours, NeighbourState};
 
 fn main() {
     let mut conn = NetlinkConnection::new();
@@ -12,7 +12,7 @@ fn main() {
         conn.iter_links().unwrap().map(|link| (link.get_index(), link)).collect::<HashMap<_, _>>();
     let neighbours = conn.iter_neighbours(None).unwrap().collect::<Vec<_>>();
     for neighbour in neighbours {
-        if neighbour.get_state() == NOARP {
+        if neighbour.get_state() == NeighbourState::NOARP {
             continue;
         }
         let ifindex = neighbour.get_ifindex();

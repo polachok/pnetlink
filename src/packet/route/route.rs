@@ -2,8 +2,7 @@
 use packet::route::{RouteCacheInfoPacket, RtMsgPacket, MutableIfInfoPacket, IfInfoPacket,
                     RtAttrIterator, RtAttrPacket, MutableRtAttrPacket};
 use packet::netlink::NetlinkPacket;
-use packet::netlink::{NLM_F_DUMP, NLM_F_MATCH, NLM_F_EXCL, NLM_F_CREATE};
-use packet::netlink::{NLMSG_ERROR, NLMSG_DONE, NLMSG_OVERRUN};
+use packet::netlink::NetlinkMsgFlags;
 use packet::netlink::{NetlinkBufIterator, NetlinkReader, NetlinkRequestBuilder};
 use packet::netlink::NetlinkConnection;
 use pnet::packet::MutablePacket;
@@ -45,11 +44,11 @@ enum RtmType {
 }
 
 bitflags! {
-    pub flags RtmFlags: u8 {
-        const NOTIFY = 0x100,
-        const CLONED = 0x200,
-        const EQUALIZE = 0x400,
-        const PREFIX = 0x800,
+    pub struct RtmFlags: u8 {
+        const NOTIFY = 0x100;
+        const CLONED = 0x200;
+        const EQUALIZE = 0x400;
+        const PREFIX = 0x800;
     }
 }
 
@@ -86,7 +85,7 @@ impl Route {
     /// Iterate over routes
     pub fn iter_routes(conn: &mut NetlinkConnection) -> RoutesIterator<&mut NetlinkConnection> {
         let mut buf = vec![0; MutableIfInfoPacket::minimum_packet_size()];
-        let req = NetlinkRequestBuilder::new(RTM_GETROUTE, NLM_F_DUMP)
+        let req = NetlinkRequestBuilder::new(RTM_GETROUTE, NetlinkMsgFlags::NLM_F_DUMP)
             .append({
                 let mut ifinfo = MutableIfInfoPacket::new(&mut buf).unwrap();
                 ifinfo.set_family(0 /* AF_UNSPEC */);
