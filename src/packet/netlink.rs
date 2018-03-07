@@ -92,6 +92,7 @@ fn read_ip_link_dump_2() {
     }
 }
 
+#[ignore]
 #[test]
 fn read_ip_link_sock() {
     use std::fs::File;
