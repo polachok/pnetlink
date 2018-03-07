@@ -11,13 +11,13 @@ license = "MIT"
 documentation = "https://docs.rs/pnetlink/"
 
 [dependencies]
-rand = "0.3.14"
+rand = "0.4"
 bitflags = "0.7"
-byteorder = "0.5.3"
+byteorder = "1"
 libc = "0.2"
-pnet = "0.20"
-pnet_macros_support = "0.20"
+pnet = "0.21"
+pnet_macros_support = "0.21"
 
 [build-dependencies]
-pnet_macros = "0.20"
+pnet_macros = "0.21"
 syntex = "0.42"
