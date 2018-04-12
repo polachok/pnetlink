@@ -5,7 +5,7 @@ use pnet::packet::PrimitiveValues;
 pub struct Netlink {
     length: u32he,
     kind: u16he, // NOOP | ERROR | DONE | OVERRUN
-    #[construct_with(u16le)] flags: NetlinkMsgFlags,
+    #[construct_with(u16he)] flags: NetlinkMsgFlags,
     seq: u32he,
     pid: u32he,
     #[payload]

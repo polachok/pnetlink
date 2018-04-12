@@ -8,12 +8,12 @@ use packet::route::neighbour::{NeighbourFlags,NeighbourState};
 pub struct IfInfo {
     family: u8,
     _pad: u8,
-    #[construct_with(u16le)]
+    #[construct_with(u16he)]
     type_: IfType,
-    index: u32le,
-    #[construct_with(u32le)]
+    index: u32he,
+    #[construct_with(u32he)]
     flags: IfFlags,
-    change: u32le,
+    change: u32he,
     #[payload]
     payload: Vec<u8>
 }
@@ -56,7 +56,7 @@ pub struct IfAddr {
     flags: IfAddrFlags,
     #[construct_with(u8)]
     scope: Scope,
-    index: u32le,
+    index: u32he,
     #[payload]
     payload: Vec<u8>
 }
@@ -136,6 +136,7 @@ pub struct RouteCacheInfo {
     payload: Vec<u8>,
 }
 
+/* fib_rule_hdr: linux/fib_rules.h */
 #[packet]
 pub struct FibRule {
     family: u8,
@@ -148,7 +149,7 @@ pub struct FibRule {
     res2: u8,
     action: u8,
 
-    flags: u32le,
+    flags: u32he,
     #[payload]
     payload: Vec<u8>,
 }
