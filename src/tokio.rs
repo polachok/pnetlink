@@ -85,28 +85,20 @@ impl tokio_io::codec::Decoder for NetlinkCodec {
     type Item = NetlinkPacket<'static>;
     type Error = io::Error;
 
-    fn decode_eof(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
-        println!("DECODE EOF CALLED");
-
-        Ok(NetlinkPacket::owned(buf[..].to_owned()))
-    }
-
     fn decode(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
         let (owned_pkt, len) = {
             if buf.len() == 0 {
                 return Ok(None);
             }
             if let Some(pkt) = NetlinkPacket::new(buf) {
-                //println!("{:?} buf: {}", pkt, buf.len());
                 let aligned_len = ::util::align(pkt.get_length() as usize);
                 if aligned_len > buf.len() {
-                    println!("NEED MORE BYTES");
+                    // need more bytes
                     return Ok(None);
                 }
                 (NetlinkPacket::owned(buf[..pkt.get_length() as usize].to_owned()), aligned_len)
             } else {
-                println!("BUF: {:?}/{}", buf, buf.len());
-                unimplemented!();
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "malformed netlink packet"))
             }
         };
         buf.drain_to(len as usize);
