@@ -1,8 +1,8 @@
-use tokio_core::reactor::{Handle, PollEvented};
-use tokio_core::io::{Codec,EasyBuf};
-use tokio_core::io::Io;
+use bytes::BytesMut;
 use futures::{Future, Poll, Async};
 use std::io;
+use tokio_core::reactor::{Handle, PollEvented};
+use tokio_io;
 use ::socket;
 use ::packet::netlink::{NetlinkPacket,MutableNetlinkPacket,NetlinkMsgFlags,self};
 use ::packet::route::{IfInfoPacket,MutableIfInfoPacket};
@@ -69,54 +69,48 @@ impl io::Write for NetlinkSocket {
     }
 }
 
-impl Io for NetlinkSocket {
-    fn poll_read(&mut self) -> Async<()> {
-        <NetlinkSocket>::poll_read(self)
-    }
+pub struct NetlinkCodec {}
 
-    fn poll_write(&mut self) -> Async<()> {
-        <NetlinkSocket>::poll_write(self)
+impl tokio_io::AsyncRead for NetlinkSocket {
+}
+
+impl tokio_io::AsyncWrite for NetlinkSocket {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        Ok(().into())
     }
 }
 
-struct NetlinkCodec {
 
-}
+impl tokio_io::codec::Decoder for NetlinkCodec {
+    type Item = NetlinkPacket<'static>;
+    type Error = io::Error;
 
-impl Codec for NetlinkCodec {
-    type In = NetlinkPacket<'static>;
-    type Out = NetlinkPacket<'static>;
-
-    fn decode_eof(&mut self, buf: &mut EasyBuf) -> io::Result<Self::In> {
-        println!("DECODE EOF CALLED");
-
-        Ok(NetlinkPacket::owned(buf.as_slice().to_owned()).unwrap())
-    }
-
-    fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<Self::In>> {
+    fn decode(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
         let (owned_pkt, len) = {
-            let slice = buf.as_slice();
-            if slice.len() == 0 {
+            if buf.len() == 0 {
                 return Ok(None);
             }
-            if let Some(pkt) = NetlinkPacket::new(slice) {
-                //println!("{:?} slice: {}", pkt, slice.len());
+            if let Some(pkt) = NetlinkPacket::new(buf) {
                 let aligned_len = ::util::align(pkt.get_length() as usize);
-                if aligned_len > slice.len() {
-                    println!("NEED MORE BYTES");
+                if aligned_len > buf.len() {
+                    // need more bytes
                     return Ok(None);
                 }
-                (NetlinkPacket::owned(slice[..pkt.get_length() as usize].to_owned()), aligned_len)
+                (NetlinkPacket::owned(buf[..pkt.get_length() as usize].to_owned()), aligned_len)
             } else {
-                println!("SLICE: {:?}/{}", slice, slice.len());
-                unimplemented!();
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "malformed netlink packet"))
             }
         };
         buf.drain_to(len as usize);
         return Ok(owned_pkt);
     }
+}
 
-    fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
+impl tokio_io::codec::Encoder for NetlinkCodec {
+    type Item = NetlinkPacket<'static>;
+    type Error = io::Error;
+
+    fn encode(&mut self, msg: Self::Item, buf: &mut BytesMut) -> io::Result<()> {
         let data = msg.packet();
         buf.extend_from_slice(data);
         Ok(())
