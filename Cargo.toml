@@ -1,6 +1,6 @@
 [package]
 name = "pnetlink"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Alexander Polakov <plhk@sdf.org>"]
 build = "build.rs"
 description = "Netlink library in pure rust"
