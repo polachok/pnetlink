@@ -11,18 +11,18 @@ license = "MIT"
 documentation = "https://docs.rs/pnetlink/"
 
 [dependencies]
-rand = "0.4"
+rand = "0.6"
 bitflags = "1"
 byteorder = "1"
 bytes = "0.4"
 futures = "0.1"
 libc = "0.2"
 mio = "0.6"
-pnet = "0.21"
-pnet_macros_support = "0.21"
+pnet = "0.22"
+pnet_macros_support = "0.22"
 tokio-core = "0.1"
 tokio-io = "0.1"
 
 [build-dependencies]
-pnet_macros = "0.21"
+pnet_macros = "0.22"
 syntex = "0.42"
