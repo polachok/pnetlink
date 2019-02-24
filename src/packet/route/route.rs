@@ -58,6 +58,41 @@ impl RtmFlags {
     }
 }
 
+/// Each netlink family has a set of 32 multicast groups. The ROUTE family defines the
+/// following values, which can be passed to `NetlinkSocket::bind`, eventually
+/// ending up in the `sockaddr_nl` struct's `nl_groups` field. From `linux/rtnetlink.h`.
+bitflags! {
+    pub struct MulticastGroup: u32 {
+        const RTMGRP_NONE = 0x0;
+
+        const RTMGRP_LINK = 0x1;
+        const RTMGRP_NOTIFY = 0x2;
+        const RTMGRP_NEIGH = 0x4;
+        const RTMGRP_TC = 0x8;
+
+        const RTMGRP_IPV4_IFADDR = 0x10;
+        const RTMGRP_IPV4_MROUTE = 0x20;
+        const RTMGRP_IPV4_ROUTE = 0x40;
+        const RTMGRP_IPV4_RULE = 0x80;
+
+        const RTMGRP_IPV6_IFADDR = 0x100;
+        const RTMGRP_IPV6_MROUTE = 0x200;
+        const RTMGRP_IPV6_ROUTE = 0x400;
+        const RTMGRP_IPV6_IFINFO = 0x800;
+
+        const RTMGRP_DECnet_IFADDR = 0x1000;
+        const RTMGRP_DECnet_ROUTE = 0x4000;
+
+        const RTMGRP_IPV6_PREFIX = 0x20000;
+    }
+}
+
+impl MulticastGroup {
+    pub fn new(groups: u32) -> Self {
+        MulticastGroup::from_bits_truncate(groups)
+    }
+}
+
 pub const RTA_UNSPEC: u16 = 0;
 pub const RTA_DST: u16 = 1;
 pub const RTA_SRC: u16 = 2;
