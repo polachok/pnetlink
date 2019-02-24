@@ -44,7 +44,7 @@ enum RtmType {
 }
 
 bitflags! {
-    pub struct RtmFlags: u8 {
+    pub struct RtmFlags: u32 {
         const NOTIFY = 0x100;
         const CLONED = 0x200;
         const EQUALIZE = 0x400;
@@ -53,8 +53,8 @@ bitflags! {
 }
 
 impl RtmFlags {
-    pub fn new(val: u8) -> Self {
-        RtmFlags::from_bits_truncate(val)
+    pub fn new(val: u32) -> Self {
+          RtmFlags::from_bits_truncate(val)
     }
 }
 
