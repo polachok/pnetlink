@@ -67,6 +67,11 @@ impl Drop for NetlinkSocket {
 
 impl NetlinkSocket {
 	pub fn bind(proto: NetlinkProtocol, groups: u32) -> Result<NetlinkSocket> {
+		let nonblocking = true;
+		NetlinkSocket::bind_with_args(proto, groups, nonblocking)
+	}
+
+	pub fn bind_with_args(proto: NetlinkProtocol, groups: u32, nonblocking: bool) -> Result<NetlinkSocket> {
 		use std::mem::size_of;
 		use std::mem::transmute;
 		use libc::getpid;
@@ -79,7 +84,7 @@ impl NetlinkSocket {
 		}
 		let sock = NetlinkSocket { fd: res };
 
-		let mut nonblocking = 1 as libc::c_ulong;
+		let mut nonblocking = if nonblocking { 1 } else { 0 } as libc::c_ulong;
 		res = unsafe {
 			libc::ioctl(sock.fd, libc::FIONBIO, &mut nonblocking)
 		};
