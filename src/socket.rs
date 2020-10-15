@@ -93,7 +93,7 @@ impl NetlinkSocket {
 		sockaddr.nl_groups = groups;
 
 		res = unsafe {
-			bind(sock.fd, transmute(&mut sockaddr), size_of::<libc::sockaddr_nl>() as u32)
+			bind(sock.fd, transmute(&mut sockaddr), size_of::<libc::sockaddr_nl>() as libc::socklen_t)
 		};
 		if res < 0 {
 			return Err(Error::last_os_error());
@@ -120,7 +120,7 @@ impl NetlinkSocket {
 
 		let len = buf.len();
 		let res = unsafe {
-			recvfrom(self.fd, buf.as_mut_ptr() as *mut c_void, len, 0, null_mut::<sockaddr>(), null_mut::<u32>())
+			recvfrom(self.fd, buf.as_mut_ptr() as *mut c_void, len, 0, null_mut::<sockaddr>(), null_mut::<libc::socklen_t>())
 		};
 		if res < 0 {
 			return Err(Error::last_os_error());
@@ -132,7 +132,7 @@ impl NetlinkSocket {
 		use std::mem;
 		let res = unsafe {
 			setsockopt(self.fd, level, option as c_int,
-					   mem::transmute(&val), mem::size_of::<c_int>() as u32)
+					   mem::transmute(&val), mem::size_of::<c_int>() as libc::socklen_t)
 		};
 
 		if res == -1 {
