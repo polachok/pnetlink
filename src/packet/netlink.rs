@@ -158,7 +158,7 @@ impl<R: Read> NetlinkReader<R> {
         loop {
             match self.state {
                 NetlinkReaderState::NeedMore => {
-                    let mut buf = [0; 4096];
+                    let mut buf = [0; 65536];
                     match self.reader.read(&mut buf) {
                         Ok(0) => {
                             self.state = NetlinkReaderState::Done;
